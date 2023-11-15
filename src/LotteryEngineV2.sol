@@ -5,7 +5,7 @@ import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Own
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
-contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
+contract LotteryEngineV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     uint256 internal value;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -18,12 +18,16 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         __UUPSUpgradeable_init();
     }
 
+    function setValue(uint256 newValue) public {
+        value = newValue;
+    }
+
     function getValue() public view returns (uint256) {
         return value;
     }
 
     function version() public pure returns (uint8) {
-        return 1;
+        return 2;
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
