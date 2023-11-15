@@ -35,3 +35,6 @@ endif
 
 deploy:
 	@forge script script/DeployLotteryEngine.s.sol:DeployLotteryEngine $(NETWORK_ARGS)
+
+upgrade:
+	@forge script script/UpgradeLotteryEngine.s.sol:UpgradeLotteryEngine $(NETWORK_ARGS)
