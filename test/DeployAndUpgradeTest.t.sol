@@ -12,34 +12,46 @@ import {LotteryEngineV2} from "../src/LotteryEngineV2.sol";
 contract DeployAndUpgradeTest is StdCheats, Test {
     DeployLotteryEngine public deployLotteryEngine;
     UpgradeLotteryEngine public upgradeLotteryEngine;
-    address public OWNER = address(1);
+    address engineProxyAddress;
+    address ticketProxyAddress;
 
     function setUp() public {
         deployLotteryEngine = new DeployLotteryEngine();
         upgradeLotteryEngine = new UpgradeLotteryEngine();
+        (engineProxyAddress, ticketProxyAddress) = deployLotteryEngine.run();
     }
 
+    ///////////////////////
+    // Deploy Tests      //
+    ///////////////////////
+
     function testLotteryEngineV1Works() public {
-        (address engineProxyAddress,) = deployLotteryEngine.deployLotteryEngine();
         uint256 expectedValue = 1;
         assertEq(expectedValue, LotteryEngineV1(engineProxyAddress).version());
     }
 
     function testTicketV1Works() public {
-        (, address ticketProxyAddress) = deployLotteryEngine.deployLotteryEngine();
         uint256 expectedValue = 1;
         assertEq(expectedValue, LotteryEngineV1(ticketProxyAddress).version());
     }
 
-    function testDeploymentIsV1() public {
-        (address engineProxyAddress,) = deployLotteryEngine.deployLotteryEngine();
+    function testEngineDeploymentIsV1() public {
         uint256 expectedValue = 7;
         vm.expectRevert();
         LotteryEngineV2(engineProxyAddress).setValue(expectedValue);
     }
 
+    function testTicketDeploymentIsV1() public {
+        uint256 expectedValue = 7;
+        vm.expectRevert();
+        LotteryEngineV2(ticketProxyAddress).setValue(expectedValue);
+    }
+
+    ///////////////////////
+    // Upgrade Tests     //
+    ///////////////////////
+
     function testEngineUpgradeWorks() public {
-        (address engineProxyAddress,) = deployLotteryEngine.deployLotteryEngine();
         LotteryEngineV2 LEV2 = new LotteryEngineV2();
         address engineProxy = upgradeLotteryEngine.upgradeLotteryEngine(engineProxyAddress, address(LEV2));
 

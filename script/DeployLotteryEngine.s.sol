@@ -9,23 +9,39 @@ import {HelperConfig} from "./HelperConfig.s.sol";
 
 contract DeployLotteryEngine is Script {
     HelperConfig helperConfig = new HelperConfig();
+    address owner;
+    address engineProxyAddr;
+    uint256 deployerKey;
 
-    function run() external returns (address engineProxy, address ticketProxy) {
-        (engineProxy, ticketProxy) = deployLotteryEngine();
+    constructor() {
+        (deployerKey) = helperConfig.activeNetworkConfig();
+        owner = vm.addr(deployerKey);
     }
 
-    function deployLotteryEngine() public returns (address, address) {
-        (uint256 deployerKey) = helperConfig.activeNetworkConfig();
-        address owner = vm.addr(deployerKey);
+    function run() external returns (address engineProxy, address ticketProxy) {
+        (engineProxy) = deployLotteryEngine();
+        (ticketProxy) = deployTicket();
+    }
 
+    function deployLotteryEngine() public returns (address) {
         vm.startBroadcast(deployerKey);
+
         LotteryEngineV1 lotteryEngine = new LotteryEngineV1();
         ERC1967Proxy engineProxy = new ERC1967Proxy(address(lotteryEngine), "");
-        LotteryEngineV1(address(engineProxy)).initialize(owner);
+        engineProxyAddr = address(engineProxy);
+        LotteryEngineV1(engineProxyAddr).initialize(owner);
+        vm.stopBroadcast();
+
+        return address(engineProxy);
+    }
+
+    function deployTicket() public returns (address) {
+        vm.startBroadcast(deployerKey);
         TicketV1 ticket = new TicketV1();
         ERC1967Proxy ticketProxy = new ERC1967Proxy(address(ticket), "");
-        TicketV1(address(ticketProxy)).initialize(owner, address(engineProxy), owner);
+        TicketV1(address(ticketProxy)).initialize(owner, engineProxyAddr, owner);
         vm.stopBroadcast();
-        return (address(engineProxy), address(ticketProxy));
+
+        return address(ticketProxy);
     }
 }
