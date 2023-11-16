@@ -10,7 +10,7 @@ import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/acce
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
-contract TicketV1 is
+contract TicketV2 is
     Initializable,
     ERC721Upgradeable,
     ERC721EnumerableUpgradeable,
@@ -54,8 +54,13 @@ contract TicketV1 is
         _setTokenInfo(tokenId, TokenInfo({claimed: false, reverse: false, round: round}));
     }
 
+    function updateTokenInfo(uint256 tokenId, bool claimed) public onlyRole(MINTER_ROLE) {
+        _requireOwned(tokenId); // Reverts if token doesn't exist
+        tokenInfo[tokenId].claimed = claimed;
+    }
+
     function version() public pure returns (uint8) {
-        return 1;
+        return 2;
     }
 
     function _setTokenInfo(uint256 tokenId, TokenInfo memory info) internal {
