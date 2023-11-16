@@ -20,27 +20,33 @@ contract DeployAndUpgradeTest is StdCheats, Test {
     }
 
     function testLotteryEngineV1Works() public {
-        address proxyAddress = deployLotteryEngine.deployLotteryEngine();
+        (address engineProxyAddress,) = deployLotteryEngine.deployLotteryEngine();
         uint256 expectedValue = 1;
-        assertEq(expectedValue, LotteryEngineV1(proxyAddress).version());
+        assertEq(expectedValue, LotteryEngineV1(engineProxyAddress).version());
+    }
+
+    function testTicketV1Works() public {
+        (, address ticketProxyAddress) = deployLotteryEngine.deployLotteryEngine();
+        uint256 expectedValue = 1;
+        assertEq(expectedValue, LotteryEngineV1(ticketProxyAddress).version());
     }
 
     function testDeploymentIsV1() public {
-        address proxyAddress = deployLotteryEngine.deployLotteryEngine();
+        (address engineProxyAddress,) = deployLotteryEngine.deployLotteryEngine();
         uint256 expectedValue = 7;
         vm.expectRevert();
-        LotteryEngineV2(proxyAddress).setValue(expectedValue);
+        LotteryEngineV2(engineProxyAddress).setValue(expectedValue);
     }
 
-    function testUpgradeWorks() public {
-        address proxyAddress = deployLotteryEngine.deployLotteryEngine();
+    function testEngineUpgradeWorks() public {
+        (address engineProxyAddress,) = deployLotteryEngine.deployLotteryEngine();
         LotteryEngineV2 LEV2 = new LotteryEngineV2();
-        address proxy = upgradeLotteryEngine.upgradeLotteryEngine(proxyAddress, address(LEV2));
+        address engineProxy = upgradeLotteryEngine.upgradeLotteryEngine(engineProxyAddress, address(LEV2));
 
         uint256 expectedValue = 2;
-        assertEq(expectedValue, LotteryEngineV2(proxy).version());
+        assertEq(expectedValue, LotteryEngineV2(engineProxy).version());
 
-        LotteryEngineV2(proxy).setValue(expectedValue);
-        assertEq(expectedValue, LotteryEngineV2(proxy).getValue());
+        LotteryEngineV2(engineProxy).setValue(expectedValue);
+        assertEq(expectedValue, LotteryEngineV2(engineProxy).getValue());
     }
 }
