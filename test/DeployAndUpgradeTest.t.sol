@@ -3,21 +3,29 @@ pragma solidity ^0.8.20;
 
 import {DeployLotteryEngine} from "../script/DeployLotteryEngine.s.sol";
 import {UpgradeLotteryEngine} from "../script/UpgradeLotteryEngine.s.sol";
+import {UpgradeTicket} from "../script/UpgradeTicket.s.sol";
 import {Test, console} from "forge-std/Test.sol";
 import {StdCheats} from "forge-std/StdCheats.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {LotteryEngineV1} from "../src/LotteryEngineV1.sol";
 import {LotteryEngineV2} from "../src/LotteryEngineV2.sol";
+import {TicketV1} from "../src/TicketV1.sol";
+import {TicketV2} from "../src/TicketV2.sol";
 
 contract DeployAndUpgradeTest is StdCheats, Test {
     DeployLotteryEngine public deployLotteryEngine;
     UpgradeLotteryEngine public upgradeLotteryEngine;
+    UpgradeTicket public upgradeTicket;
+
     address engineProxyAddress;
     address ticketProxyAddress;
+
+    address USER = address(0x1);
 
     function setUp() public {
         deployLotteryEngine = new DeployLotteryEngine();
         upgradeLotteryEngine = new UpgradeLotteryEngine();
+        upgradeTicket = new UpgradeTicket();
         (engineProxyAddress, ticketProxyAddress) = deployLotteryEngine.run();
     }
 
@@ -30,21 +38,26 @@ contract DeployAndUpgradeTest is StdCheats, Test {
         assertEq(expectedValue, LotteryEngineV1(engineProxyAddress).version());
     }
 
-    function testTicketV1Works() public {
-        uint256 expectedValue = 1;
-        assertEq(expectedValue, LotteryEngineV1(ticketProxyAddress).version());
-    }
-
     function testEngineDeploymentIsV1() public {
         uint256 expectedValue = 7;
         vm.expectRevert();
         LotteryEngineV2(engineProxyAddress).setValue(expectedValue);
     }
 
+    function testTicketV1Works() public {
+        uint256 expectedValue = 1;
+        assertEq(expectedValue, TicketV1(ticketProxyAddress).version());
+    }
+
     function testTicketDeploymentIsV1() public {
-        uint256 expectedValue = 7;
+        TicketV1 ticketV1 = TicketV1(ticketProxyAddress);
+        uint16 ROUND = 1;
+        string memory MOCKED_URI = "test";
+
+        vm.prank(engineProxyAddress);
+        ticketV1.safeMint(USER, MOCKED_URI, ROUND);
         vm.expectRevert();
-        LotteryEngineV2(ticketProxyAddress).setValue(expectedValue);
+        TicketV2(ticketProxyAddress).updateTokenInfo(0, true);
     }
 
     ///////////////////////
@@ -52,13 +65,34 @@ contract DeployAndUpgradeTest is StdCheats, Test {
     ///////////////////////
 
     function testEngineUpgradeWorks() public {
-        LotteryEngineV2 LEV2 = new LotteryEngineV2();
-        address engineProxy = upgradeLotteryEngine.upgradeLotteryEngine(engineProxyAddress, address(LEV2));
+        LotteryEngineV2 newLotteryEngineVersion = new LotteryEngineV2();
+        LotteryEngineV2 lotteryEngineV2 = LotteryEngineV2(engineProxyAddress);
+        upgradeLotteryEngine.upgradeLotteryEngine(engineProxyAddress, address(newLotteryEngineVersion));
 
         uint256 expectedValue = 2;
-        assertEq(expectedValue, LotteryEngineV2(engineProxy).version());
+        assertEq(expectedValue, lotteryEngineV2.version());
 
-        LotteryEngineV2(engineProxy).setValue(expectedValue);
-        assertEq(expectedValue, LotteryEngineV2(engineProxy).getValue());
+        lotteryEngineV2.setValue(expectedValue);
+        assertEq(expectedValue, lotteryEngineV2.getValue());
+    }
+
+    function testTicketUpgradeWorks() public {
+        TicketV2 newTicketVersion = new TicketV2();
+        TicketV2 ticketV2 = TicketV2(ticketProxyAddress);
+        upgradeTicket.upgradeTicket(ticketProxyAddress, address(newTicketVersion));
+
+        uint256 expectedValue = 2;
+        assertEq(expectedValue, ticketV2.version());
+
+        uint16 ROUND = 1;
+        string memory MOCKED_URI = "test";
+
+        vm.startPrank(engineProxyAddress);
+        ticketV2.safeMint(USER, MOCKED_URI, ROUND);
+        TicketV2(ticketProxyAddress).updateTokenInfo(0, true);
+        vm.stopPrank();
+
+        (bool claimed,,) = ticketV2.tokenInfo(0);
+        assertEq(claimed, true);
     }
 }
