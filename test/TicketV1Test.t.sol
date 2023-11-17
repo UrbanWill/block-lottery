@@ -23,7 +23,7 @@ contract TicketV1Test is StdCheats, Test {
 
     function setUp() public {
         deployLotteryEngine = new DeployLotteryEngine();
-        (engineProxyAddress, ticketProxyAddress) = deployLotteryEngine.run();
+        (engineProxyAddress, ticketProxyAddress,) = deployLotteryEngine.run();
         ticketV1 = TicketV1(ticketProxyAddress);
     }
 

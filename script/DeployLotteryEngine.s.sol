@@ -6,8 +6,11 @@ import {LotteryEngineV1} from "../src/LotteryEngineV1.sol";
 import {TicketV1} from "../src/TicketV1.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {HelperConfig} from "./HelperConfig.s.sol";
+import {DataTypesLib} from "../src/libraries/DataTypesLib.sol";
 
 contract DeployLotteryEngine is Script {
+    using DataTypesLib for DataTypesLib.GameEntryFees;
+
     HelperConfig helperConfig = new HelperConfig();
     address owner;
     address engineProxyAddr;
@@ -15,21 +18,26 @@ contract DeployLotteryEngine is Script {
 
     constructor() {
         (deployerKey) = helperConfig.activeNetworkConfig();
+        // owner = address(uint160(uint256(deployerKey)));
         owner = vm.addr(deployerKey);
     }
 
-    function run() external returns (address engineProxy, address ticketProxy) {
+    function run() external returns (address engineProxy, address ticketProxy, address contractOwner) {
         (engineProxy) = deployLotteryEngine();
         (ticketProxy) = deployTicket();
+        contractOwner = owner;
     }
 
     function deployLotteryEngine() public returns (address) {
+        DataTypesLib.GameEntryFees memory twoDigitGameFees =
+            DataTypesLib.GameEntryFees(0.01 ether, 0.02 ether, 0.03 ether);
+
         vm.startBroadcast(deployerKey);
 
         LotteryEngineV1 lotteryEngine = new LotteryEngineV1();
         ERC1967Proxy engineProxy = new ERC1967Proxy(address(lotteryEngine), "");
         engineProxyAddr = address(engineProxy);
-        LotteryEngineV1(engineProxyAddr).initialize(owner);
+        LotteryEngineV1(engineProxyAddr).initialize(owner, twoDigitGameFees);
         vm.stopBroadcast();
 
         return address(engineProxy);

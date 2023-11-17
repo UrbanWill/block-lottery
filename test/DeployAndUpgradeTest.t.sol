@@ -11,22 +11,25 @@ import {LotteryEngineV1} from "../src/LotteryEngineV1.sol";
 import {LotteryEngineV2} from "../src/LotteryEngineV2.sol";
 import {TicketV1} from "../src/TicketV1.sol";
 import {TicketV2} from "../src/TicketV2.sol";
+import {DataTypesLib} from "../src/libraries/DataTypesLib.sol";
 
 contract DeployAndUpgradeTest is StdCheats, Test {
+    using DataTypesLib for DataTypesLib.GameEntryFees;
+
     DeployLotteryEngine public deployLotteryEngine;
     UpgradeLotteryEngine public upgradeLotteryEngine;
     UpgradeTicket public upgradeTicket;
 
     address engineProxyAddress;
     address ticketProxyAddress;
-
+    address owner;
     address USER = address(0x1);
 
     function setUp() public {
         deployLotteryEngine = new DeployLotteryEngine();
         upgradeLotteryEngine = new UpgradeLotteryEngine();
         upgradeTicket = new UpgradeTicket();
-        (engineProxyAddress, ticketProxyAddress) = deployLotteryEngine.run();
+        (engineProxyAddress, ticketProxyAddress, owner) = deployLotteryEngine.run();
     }
 
     ///////////////////////
@@ -94,5 +97,34 @@ contract DeployAndUpgradeTest is StdCheats, Test {
 
         (bool claimed,,) = ticketV2.tokenInfo(0);
         assertEq(claimed, true);
+    }
+
+    ///////////////////////
+    // Initializer Test  //
+    ///////////////////////
+
+    function testEngineV1OwnerIsSetCorrectly() public {
+        address expectedValue = owner;
+        assertEq(expectedValue, LotteryEngineV1(engineProxyAddress).owner());
+    }
+    /**
+     * TODO:
+     * Abosulutely test access control before shipping to prod
+     */
+
+    // function testTicketV1IsAccessControlSetCorrectly() public {
+    //     bytes32 minterRole = TicketV1(ticketProxyAddress).MINTER_ROLE();
+    //     assertEq(engineProxyAddress, address(uint160(uint256(minterRole))));
+    // }
+
+    function testEngineV1GameEntryFeesAreSetCorrectly() public {
+        DataTypesLib.GameEntryFees memory expectedEntryFees =
+            DataTypesLib.GameEntryFees(0.01 ether, 0.02 ether, 0.03 ether);
+        DataTypesLib.GameEntryFees memory entryFees =
+            LotteryEngineV1(engineProxyAddress).getGameEntryFee(DataTypesLib.GameDigits.Two);
+
+        assertEq(entryFees.One, expectedEntryFees.One);
+        assertEq(entryFees.Two, expectedEntryFees.Two);
+        assertEq(entryFees.Three, expectedEntryFees.Three);
     }
 }
