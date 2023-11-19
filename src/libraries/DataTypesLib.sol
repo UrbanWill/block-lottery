@@ -9,9 +9,22 @@ library DataTypesLib {
 
     enum TwoDigitGameType {
         Lower, // Two digits game will default to lower game type
-        Reverse,
-        Upper,
-        UpperReverse
+        Upper
+    }
+
+    enum GameStatus {
+        Closed,
+        Paused,
+        Cancelled,
+        Open,
+        Claimable
+    }
+
+    struct RoundStatus {
+        GameStatus status;
+        bool hasWinners;
+        TwoDigitGameStats lowerGameStats;
+        TwoDigitGameStats reverseGameStats;
     }
 
     struct GameEntryFees {
@@ -19,4 +32,10 @@ library DataTypesLib {
         uint256 Two;
         uint256 Three;
     }
+
+    struct TwoDigitGameStats {
+        uint256 totalTicketsSold;
+        mapping(uint8 ticketNumber => uint256 ticketCount) ticketCountPerNumber;
+    }
+    // add more stats per GameEntryFees
 }
