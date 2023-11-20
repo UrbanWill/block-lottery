@@ -9,29 +9,32 @@ import {HelperConfig} from "./HelperConfig.s.sol";
 import {DataTypesLib} from "../src/libraries/DataTypesLib.sol";
 
 contract DeployLotteryEngine is Script {
-    using DataTypesLib for DataTypesLib.GameEntryFees;
-
     HelperConfig helperConfig = new HelperConfig();
     address owner;
     address engineProxyAddr;
     uint256 deployerKey;
+    uint256[3] twoDigitGameFees;
 
     constructor() {
-        (deployerKey) = helperConfig.activeNetworkConfig();
+        (uint256 _deployerKey, uint256 twoDigitGameFee1, uint256 twoDigitGameFee2, uint256 twoDigitGameFee3) =
+            helperConfig.activeNetworkConfig();
         // owner = address(uint160(uint256(deployerKey)));
+        deployerKey = _deployerKey;
+        twoDigitGameFees = [twoDigitGameFee1, twoDigitGameFee2, twoDigitGameFee3];
         owner = vm.addr(deployerKey);
     }
 
-    function run() external returns (address engineProxy, address ticketProxy, address contractOwner) {
+    function run()
+        external
+        returns (address engineProxy, address ticketProxy, address contractOwner, uint256[3] memory _twoDigitGameFees)
+    {
         (engineProxy) = deployLotteryEngine();
         (ticketProxy) = deployTicket();
         contractOwner = owner;
+        _twoDigitGameFees = twoDigitGameFees;
     }
 
     function deployLotteryEngine() public returns (address) {
-        DataTypesLib.GameEntryFees memory twoDigitGameFees =
-            DataTypesLib.GameEntryFees(0.01 ether, 0.02 ether, 0.03 ether);
-
         vm.startBroadcast(deployerKey);
 
         LotteryEngineV1 lotteryEngine = new LotteryEngineV1();

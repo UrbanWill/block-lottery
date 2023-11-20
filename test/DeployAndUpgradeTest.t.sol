@@ -14,8 +14,6 @@ import {TicketV2} from "../src/TicketV2.sol";
 import {DataTypesLib} from "../src/libraries/DataTypesLib.sol";
 
 contract DeployAndUpgradeTest is StdCheats, Test {
-    using DataTypesLib for DataTypesLib.GameEntryFees;
-
     DeployLotteryEngine public deployLotteryEngine;
     UpgradeLotteryEngine public upgradeLotteryEngine;
     UpgradeTicket public upgradeTicket;
@@ -24,12 +22,13 @@ contract DeployAndUpgradeTest is StdCheats, Test {
     address ticketProxyAddress;
     address owner;
     address USER = address(0x1);
+    uint256[3] twoDigitGameFees;
 
     function setUp() public {
         deployLotteryEngine = new DeployLotteryEngine();
         upgradeLotteryEngine = new UpgradeLotteryEngine();
         upgradeTicket = new UpgradeTicket();
-        (engineProxyAddress, ticketProxyAddress, owner) = deployLotteryEngine.run();
+        (engineProxyAddress, ticketProxyAddress, owner, twoDigitGameFees) = deployLotteryEngine.run();
     }
 
     ///////////////////////
@@ -118,13 +117,19 @@ contract DeployAndUpgradeTest is StdCheats, Test {
     // }
 
     function testEngineV1GameEntryFeesAreSetCorrectly() public {
-        DataTypesLib.GameEntryFees memory expectedEntryFees =
-            DataTypesLib.GameEntryFees(0.01 ether, 0.02 ether, 0.03 ether);
-        DataTypesLib.GameEntryFees memory entryFees =
-            LotteryEngineV1(engineProxyAddress).getGameEntryFee(DataTypesLib.GameDigits.Two);
-
-        assertEq(entryFees.One, expectedEntryFees.One);
-        assertEq(entryFees.Two, expectedEntryFees.Two);
-        assertEq(entryFees.Three, expectedEntryFees.Three);
+        assertEq(
+            LotteryEngineV1(engineProxyAddress).getGameFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One),
+            twoDigitGameFees[0]
+        );
+        assertEq(
+            LotteryEngineV1(engineProxyAddress).getGameFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Two),
+            twoDigitGameFees[1]
+        );
+        assertEq(
+            LotteryEngineV1(engineProxyAddress).getGameFee(
+                DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Three
+            ),
+            twoDigitGameFees[2]
+        );
     }
 }
