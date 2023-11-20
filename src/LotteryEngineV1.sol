@@ -10,7 +10,8 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     ////////////////////////////////////////
     // State Variables                    //
     ////////////////////////////////////////
-
+    uint8 constant MIN_NUMBER = 1;
+    uint8 constant MAX_TWO_DIGIT_GAME_NUMBER = 99;
     uint16 s_roundCounter = 0;
     uint256 public s_totalTicketsSold = 0;
     mapping(DataTypesLib.GameDigits => DataTypesLib.FeePerTier) private s_gameEntryFees;
@@ -31,6 +32,9 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     error LotteryEngine__CurrentRoundOngoing();
     error LotteryEngine__RoundMustBeOpen();
+    error LotteryEngine__IncorrectTierFee();
+    error LotteryEngine__GameDigitNotSupported();
+    error LotteryEngine__NumberOutOfRange();
     ////////////////////////////////////////
     // Modifiers                          //
     ////////////////////////////////////////
@@ -86,8 +90,23 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
      * @param tier Tier price of the game
      * @param number Number to bet on
      */
-    function buyTicket(uint16 round, DataTypesLib.GameEntryTier tier, uint8 number) public roundMustBeOpen(round) {
-        // require(msg.value == s_gameEntryFees[DataTypesLib.GameDigits.Two].One, "Incorrect entry fee");
+    function buyTicket(uint16 round, DataTypesLib.GameDigits gameDigit, DataTypesLib.GameEntryTier tier, uint8 number)
+        public
+        payable
+        roundMustBeOpen(round)
+    {
+        if (msg.value != getGameFee(gameDigit, tier)) {
+            revert LotteryEngine__IncorrectTierFee();
+        }
+        if (gameDigit != DataTypesLib.GameDigits.Two) {
+            revert LotteryEngine__GameDigitNotSupported();
+        }
+
+        if (gameDigit == DataTypesLib.GameDigits.Two) {
+            if (number < MIN_NUMBER || number > MAX_TWO_DIGIT_GAME_NUMBER) {
+                revert LotteryEngine__NumberOutOfRange();
+            }
+        }
 
         s_totalTicketsSold++;
         s_roundStats[round].statsPerGameTier[tier].tierTicketCount++;
