@@ -7,19 +7,15 @@ import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/U
 import {DataTypesLib} from "./libraries/DataTypesLib.sol";
 
 contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
-    using DataTypesLib for DataTypesLib.GameEntryFees;
-    using DataTypesLib for DataTypesLib.GameDigits;
-    using DataTypesLib for DataTypesLib.RoundStatus;
-
     ///////////////////////
     // State Variables   //
     ///////////////////////
 
     uint16 s_roundCounter = 0;
-    uint256 s_totalTicketsSold = 0;
-    mapping(uint16 round => DataTypesLib.RoundStatus roundStats) private s_roundStats;
+    uint256 public s_totalTicketsSold = 0;
+    mapping(DataTypesLib.GameDigits => DataTypesLib.FeePerTier) private s_gameEntryFees;
 
-    mapping(DataTypesLib.GameDigits => DataTypesLib.GameEntryFees) private s_gameEntryFees;
+    mapping(uint16 round => DataTypesLib.RoundStatus roundStats) public s_roundStats;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -43,13 +39,13 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     // Functions                          //
     ////////////////////////////////////////
 
-    function initialize(address initialOwner, DataTypesLib.GameEntryFees calldata twoDigitGameFees)
-        public
-        initializer
-    {
+    function initialize(address initialOwner, uint256[3] memory _twoDigitGameFees) public initializer {
         __Ownable_init(initialOwner);
         __UUPSUpgradeable_init();
-        s_gameEntryFees[DataTypesLib.GameDigits.Two] = twoDigitGameFees;
+
+        s_gameEntryFees[DataTypesLib.GameDigits.Two].feePerTier[DataTypesLib.GameEntryTier.One] = _twoDigitGameFees[0];
+        s_gameEntryFees[DataTypesLib.GameDigits.Two].feePerTier[DataTypesLib.GameEntryTier.Two] = _twoDigitGameFees[1];
+        s_gameEntryFees[DataTypesLib.GameDigits.Two].feePerTier[DataTypesLib.GameEntryTier.Three] = _twoDigitGameFees[2];
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
@@ -62,17 +58,24 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         s_roundStats[s_roundCounter].status = DataTypesLib.GameStatus.Open;
     }
 
+    /**
+     * @notice Buy a ticket for a given round
+     * @param round Round number
+     * @param tier Tier price of the game
+     * @param number Number to bet on
+     */
+    function buyTicket(uint16 round, DataTypesLib.GameEntryTier tier, uint8 number) public {
+        require(s_roundStats[round].status == DataTypesLib.GameStatus.Open, "Round is not open");
+        // require(msg.value == s_gameEntryFees[DataTypesLib.GameDigits.Two].One, "Incorrect entry fee");
+
+        s_totalTicketsSold++;
+        s_roundStats[round].statsPerGameTier[tier].tierTicketCount++;
+        s_roundStats[round].statsPerGameTier[tier].ticketCountPerNumber[number]++;
+    }
+
     ////////////////////////////////////////
     // Public & External View Functions   //
     ////////////////////////////////////////
-
-    function getGameEntryFee(DataTypesLib.GameDigits gameDigit)
-        public
-        view
-        returns (DataTypesLib.GameEntryFees memory)
-    {
-        return s_gameEntryFees[gameDigit];
-    }
 
     function getCurrentRound() public view returns (uint16) {
         return s_roundCounter;
@@ -80,6 +83,39 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     function getRoundStatus(uint16 round) public view returns (DataTypesLib.GameStatus) {
         return s_roundStats[round].status;
+    }
+
+    /**
+     * @param round Round number
+     * @param tier Tier price of the game
+     * @return Total number of tickets sold for a given tier in that round
+     */
+    function getTierTicketCountSoldPerRound(uint16 round, DataTypesLib.GameEntryTier tier)
+        public
+        view
+        returns (uint256)
+    {
+        return s_roundStats[round].statsPerGameTier[tier].tierTicketCount;
+    }
+
+    function getTierNumberSoldCountPerRound(uint16 round, DataTypesLib.GameEntryTier tier, uint8 number)
+        public
+        view
+        returns (uint256)
+    {
+        return s_roundStats[round].statsPerGameTier[tier].ticketCountPerNumber[number];
+    }
+
+    /**
+     * @param gameDigit Digits of the game, currently only 2 digits is supported
+     * @param gameEntryTier Tier of the game, maps to the entry fee
+     */
+    function getGameFee(DataTypesLib.GameDigits gameDigit, DataTypesLib.GameEntryTier gameEntryTier)
+        public
+        view
+        returns (uint256)
+    {
+        return s_gameEntryFees[gameDigit].feePerTier[gameEntryTier];
     }
 
     function version() public pure returns (uint8) {
