@@ -7,9 +7,9 @@ import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/U
 import {DataTypesLib} from "./libraries/DataTypesLib.sol";
 
 contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
-    ///////////////////////
-    // State Variables   //
-    ///////////////////////
+    ////////////////////////////////////////
+    // State Variables                    //
+    ////////////////////////////////////////
 
     uint16 s_roundCounter = 0;
     uint256 public s_totalTicketsSold = 0;
@@ -17,27 +17,49 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     mapping(uint16 round => DataTypesLib.RoundStatus roundStats) public s_roundStats;
 
-    /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
-        _disableInitializers();
-    }
+    ////////////////////////////////////////
+    // Events                             //
+    ////////////////////////////////////////
 
+    event TicketBought(
+        uint16 indexed round, DataTypesLib.GameEntryTier indexed tier, uint8 indexed number, address player
+    );
+
+    ////////////////////////////////////////
+    // Errors                             //
+    ////////////////////////////////////////
+
+    error LotteryEngine__CurrentRoundOngoing();
+    error LotteryEngine__RoundMustBeOpen();
     ////////////////////////////////////////
     // Modifiers                          //
     ////////////////////////////////////////
 
     modifier canOpenRound() {
-        require(
-            s_roundStats[s_roundCounter].status != DataTypesLib.GameStatus.Open
-                && s_roundStats[s_roundCounter].status != DataTypesLib.GameStatus.Paused,
-            "Round is not closed"
-        );
+        if (
+            s_roundStats[s_roundCounter].status == DataTypesLib.GameStatus.Open
+                || s_roundStats[s_roundCounter].status == DataTypesLib.GameStatus.Paused
+        ) {
+            revert LotteryEngine__CurrentRoundOngoing();
+        }
+        _;
+    }
+
+    modifier roundMustBeOpen(uint16 round) {
+        if (s_roundStats[round].status != DataTypesLib.GameStatus.Open) {
+            revert LotteryEngine__RoundMustBeOpen();
+        }
         _;
     }
 
     ////////////////////////////////////////
     // Functions                          //
     ////////////////////////////////////////
+
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
 
     function initialize(address initialOwner, uint256[3] memory _twoDigitGameFees) public initializer {
         __Ownable_init(initialOwner);
@@ -64,13 +86,14 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
      * @param tier Tier price of the game
      * @param number Number to bet on
      */
-    function buyTicket(uint16 round, DataTypesLib.GameEntryTier tier, uint8 number) public {
-        require(s_roundStats[round].status == DataTypesLib.GameStatus.Open, "Round is not open");
+    function buyTicket(uint16 round, DataTypesLib.GameEntryTier tier, uint8 number) public roundMustBeOpen(round) {
         // require(msg.value == s_gameEntryFees[DataTypesLib.GameDigits.Two].One, "Incorrect entry fee");
 
         s_totalTicketsSold++;
         s_roundStats[round].statsPerGameTier[tier].tierTicketCount++;
         s_roundStats[round].statsPerGameTier[tier].ticketCountPerNumber[number]++;
+
+        emit TicketBought(round, tier, number, msg.sender);
     }
 
     ////////////////////////////////////////

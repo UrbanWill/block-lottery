@@ -24,7 +24,15 @@ contract LotteryEngineV1Test is StdCheats, Test {
     }
 
     ////////////////////////////////////////
-    // odifiers & Helpers                 //
+    // Events                             //
+    ////////////////////////////////////////
+
+    event TicketBought(
+        uint16 indexed round, DataTypesLib.GameEntryTier indexed tier, uint8 indexed number, address player
+    );
+
+    ////////////////////////////////////////
+    // Modifiers & Helpers                //
     ////////////////////////////////////////
 
     modifier createNewRound() {
@@ -35,6 +43,12 @@ contract LotteryEngineV1Test is StdCheats, Test {
     ////////////////////////////////////////
     // createRound Tests                  //
     ////////////////////////////////////////
+
+    function testLEV1CreateRoundRevertsWhenRoundIsOpen() public createNewRound {
+        vm.prank(LotteryEngineV1(engineProxyAddress).owner());
+        vm.expectRevert(LotteryEngineV1.LotteryEngine__CurrentRoundOngoing.selector);
+        lotteryEngineV1.createRound();
+    }
 
     function testLEV1CreateRoundRevertsNotOwner() public {
         vm.expectRevert();
@@ -59,16 +73,18 @@ contract LotteryEngineV1Test is StdCheats, Test {
     ////////////////////////////////////////
 
     function testLEV1BuyTicketRevertsWhenRoundIsNotOpen() public {
-        vm.expectRevert();
+        vm.expectRevert(LotteryEngineV1.LotteryEngine__RoundMustBeOpen.selector);
         lotteryEngineV1.buyTicket(1, DataTypesLib.GameEntryTier.One, 1);
     }
 
-    function testLEV1BuyTicketUpdatesRoundStats() public createNewRound {
+    function testLEV1BuyTicketUpdatesRoundStatsAndEmits() public createNewRound {
         uint256 expectedTicketSold = 1;
         uint16 round = 1;
         uint8 number = 33;
 
         vm.prank(USER);
+        vm.expectEmit(true, true, true, true, engineProxyAddress);
+        emit TicketBought(round, DataTypesLib.GameEntryTier.One, number, USER);
         lotteryEngineV1.buyTicket(round, DataTypesLib.GameEntryTier.One, number);
 
         assertEq(
