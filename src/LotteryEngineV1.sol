@@ -6,17 +6,28 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {TicketV1} from "./TicketV1.sol";
 import {DataTypesLib} from "./libraries/DataTypesLib.sol";
+import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+import {OracleLib} from "./libraries/OracleLib.sol";
 
 contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     ////////////////////////////////////////
+    // Types                              //
+    ////////////////////////////////////////
+
+    using OracleLib for AggregatorV3Interface;
+    ////////////////////////////////////////
     // State Variables                    //
     ////////////////////////////////////////
-    uint8 constant MIN_NUMBER = 1;
-    uint8 constant MAX_TWO_DIGIT_GAME_NUMBER = 99;
+
+    uint8 private constant MIN_NUMBER = 1;
+    uint8 private constant MAX_TWO_DIGIT_GAME_NUMBER = 99;
+    uint256 private constant ADDITIONAL_FEED_PRECISION = 1e10;
+    uint256 private constant PRECISION = 1e18;
     uint16 s_roundCounter = 0;
     uint256 public s_totalTicketsSold = 0;
 
     address public s_ticketAddress;
+    address private s_priceFeed;
 
     mapping(DataTypesLib.GameDigits => DataTypesLib.FeePerTier) private s_gameEntryFees;
     mapping(uint16 round => DataTypesLib.RoundStatus roundStats) public s_roundStats;
@@ -68,14 +79,17 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         _disableInitializers();
     }
 
-    function initialize(address initialOwner, address _ticketAddress, uint256[3] memory _twoDigitGameFees)
-        public
-        initializer
-    {
+    function initialize(
+        address initialOwner,
+        address _ticketAddress,
+        address priceFeedAddress,
+        uint256[3] memory _twoDigitGameFees
+    ) public initializer {
         __Ownable_init(initialOwner);
         __UUPSUpgradeable_init();
 
         s_ticketAddress = _ticketAddress;
+        s_priceFeed = priceFeedAddress;
 
         s_gameEntryFees[DataTypesLib.GameDigits.Two].feePerTier[DataTypesLib.GameEntryTier.One] = _twoDigitGameFees[0];
         s_gameEntryFees[DataTypesLib.GameDigits.Two].feePerTier[DataTypesLib.GameEntryTier.Two] = _twoDigitGameFees[1];
@@ -160,6 +174,16 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     ////////////////////////////////////////
     // Public & External View Functions   //
     ////////////////////////////////////////
+
+    function getTokenAmountFromUsd(uint256 usdAmountInWei) public view returns (uint256) {
+        AggregatorV3Interface priceFeed = AggregatorV3Interface(s_priceFeed);
+        (, int256 price,,,) = priceFeed.staleCheckLatestRoundData();
+        // $100e18 USD Debt
+        // 1 ETH = 2000 USD
+        // The returned value from Chainlink will be 2000 * 1e8
+        // Most USD pairs have 8 decimals, so we will just pretend they all do
+        return ((usdAmountInWei * PRECISION) / (uint256(price) * ADDITIONAL_FEED_PRECISION));
+    }
 
     function getCurrentRound() public view returns (uint16) {
         return s_roundCounter;
