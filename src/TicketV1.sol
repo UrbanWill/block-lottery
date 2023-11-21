@@ -9,6 +9,7 @@ import {ERC721URIStorageUpgradeable} from
 import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {DataTypesLib} from "./libraries/DataTypesLib.sol";
 
 contract TicketV1 is
     Initializable,
@@ -26,8 +27,10 @@ contract TicketV1 is
 
     struct TokenInfo {
         bool claimed;
-        bool reverse;
         uint16 round;
+        DataTypesLib.GameDigits gameDigit;
+        DataTypesLib.GameEntryTier tier;
+        uint8 number;
     }
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -47,11 +50,23 @@ contract TicketV1 is
         _grantRole(UPGRADER_ROLE, upgrader);
     }
 
-    function safeMint(address to, string memory uri, uint16 round) public onlyRole(MINTER_ROLE) {
+    function safeMint(
+        address to,
+        uint16 round,
+        DataTypesLib.GameDigits gameDigit,
+        DataTypesLib.GameEntryTier tier,
+        uint8 number,
+        string memory uri
+    ) public onlyRole(MINTER_ROLE) returns (uint256) {
         uint256 tokenId = _nextTokenId++;
+
         _safeMint(to, tokenId);
         _setTokenURI(tokenId, uri);
-        _setTokenInfo(tokenId, TokenInfo({claimed: false, reverse: false, round: round}));
+        _setTokenInfo(
+            tokenId, TokenInfo({claimed: false, round: round, gameDigit: gameDigit, tier: tier, number: number})
+        );
+
+        return tokenId;
     }
 
     function version() public pure returns (uint8) {
