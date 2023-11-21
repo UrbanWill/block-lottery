@@ -53,11 +53,14 @@ contract DeployAndUpgradeTest is StdCheats, Test {
 
     function testTicketDeploymentIsV1() public {
         TicketV1 ticketV1 = TicketV1(ticketProxyAddress);
-        uint16 ROUND = 1;
-        string memory MOCKED_URI = "test";
+        uint16 round = 1;
+        DataTypesLib.GameDigits gameDigits = DataTypesLib.GameDigits.Two;
+        DataTypesLib.GameEntryTier entryTier = DataTypesLib.GameEntryTier.One;
+        uint8 number = 1;
+        string memory uri = "test";
 
         vm.prank(engineProxyAddress);
-        ticketV1.safeMint(USER, MOCKED_URI, ROUND);
+        ticketV1.safeMint(USER, round, gameDigits, entryTier, number, uri);
         vm.expectRevert();
         TicketV2(ticketProxyAddress).updateTokenInfo(0, true);
     }

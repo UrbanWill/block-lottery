@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {TicketV1} from "./TicketV1.sol";
 import {DataTypesLib} from "./libraries/DataTypesLib.sol";
 
 contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
@@ -82,7 +82,9 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         s_gameEntryFees[DataTypesLib.GameDigits.Two].feePerTier[DataTypesLib.GameEntryTier.Three] = _twoDigitGameFees[2];
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    ////////////////////////////////////////
+    // External Functions                 //
+    ////////////////////////////////////////
 
     /**
      * @notice Creates a new round with open status
@@ -91,18 +93,22 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         s_roundCounter++;
         s_roundStats[s_roundCounter].status = DataTypesLib.GameStatus.Open;
     }
-
     /**
-     * @notice Buy a ticket for a given round
+     * @notice Buy a ticket for a given round, mints a new ticket NFT
      * @param round Round number
+     * @param gameDigit Digits of the game, currently only 2 digits is supported
      * @param tier Tier price of the game
      * @param number Number to bet on
+     * @param tokenUri URI of the token to be minted
      */
-    function buyTicket(uint16 round, DataTypesLib.GameDigits gameDigit, DataTypesLib.GameEntryTier tier, uint8 number)
-        public
-        payable
-        roundMustBeOpen(round)
-    {
+
+    function buyTicket(
+        uint16 round,
+        DataTypesLib.GameDigits gameDigit,
+        DataTypesLib.GameEntryTier tier,
+        uint8 number,
+        string memory tokenUri
+    ) public payable roundMustBeOpen(round) returns (uint256) {
         if (msg.value != getGameFee(gameDigit, tier)) {
             revert LotteryEngine__IncorrectTierFee();
         }
@@ -120,9 +126,37 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         s_roundStats[round].statsPerGameTier[tier].tierTicketCount++;
         s_roundStats[round].statsPerGameTier[tier].ticketCountPerNumber[number]++;
 
-        emit TicketBought(round, tier, number, msg.sender);
-    }
+        uint256 tokenId = _mintTicket(round, gameDigit, tier, number, tokenUri);
 
+        emit TicketBought(round, tier, number, msg.sender);
+
+        return tokenId;
+    }
+    ////////////////////////////////////////
+    // Private & Internal View Functions  //
+    ////////////////////////////////////////
+
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+
+    /**
+     * @param round Round number
+     * @param gameDigit Digits of the game, currently only 2 digits is supported
+     * @param tier Tier price of the game
+     * @param number Number to bet on
+     * @param tokenUri URI of the token to be minted
+     */
+
+    function _mintTicket(
+        uint16 round,
+        DataTypesLib.GameDigits gameDigit,
+        DataTypesLib.GameEntryTier tier,
+        uint8 number,
+        string memory tokenUri
+    ) internal returns (uint256) {
+        uint256 tokenId = TicketV1(s_ticketAddress).safeMint(msg.sender, round, gameDigit, tier, number, tokenUri);
+
+        return tokenId;
+    }
     ////////////////////////////////////////
     // Public & External View Functions   //
     ////////////////////////////////////////
