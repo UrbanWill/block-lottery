@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {DataTypesLib} from "./libraries/DataTypesLib.sol";
 
 contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
@@ -14,8 +15,10 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     uint8 constant MAX_TWO_DIGIT_GAME_NUMBER = 99;
     uint16 s_roundCounter = 0;
     uint256 public s_totalTicketsSold = 0;
-    mapping(DataTypesLib.GameDigits => DataTypesLib.FeePerTier) private s_gameEntryFees;
 
+    address public s_ticketAddress;
+
+    mapping(DataTypesLib.GameDigits => DataTypesLib.FeePerTier) private s_gameEntryFees;
     mapping(uint16 round => DataTypesLib.RoundStatus roundStats) public s_roundStats;
 
     ////////////////////////////////////////
@@ -65,9 +68,14 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         _disableInitializers();
     }
 
-    function initialize(address initialOwner, uint256[3] memory _twoDigitGameFees) public initializer {
+    function initialize(address initialOwner, address _ticketAddress, uint256[3] memory _twoDigitGameFees)
+        public
+        initializer
+    {
         __Ownable_init(initialOwner);
         __UUPSUpgradeable_init();
+
+        s_ticketAddress = _ticketAddress;
 
         s_gameEntryFees[DataTypesLib.GameDigits.Two].feePerTier[DataTypesLib.GameEntryTier.One] = _twoDigitGameFees[0];
         s_gameEntryFees[DataTypesLib.GameDigits.Two].feePerTier[DataTypesLib.GameEntryTier.Two] = _twoDigitGameFees[1];

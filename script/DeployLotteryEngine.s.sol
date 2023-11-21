@@ -11,7 +11,6 @@ import {DataTypesLib} from "../src/libraries/DataTypesLib.sol";
 contract DeployLotteryEngine is Script {
     HelperConfig helperConfig = new HelperConfig();
     address owner;
-    address engineProxyAddr;
     uint256 deployerKey;
     uint256[3] twoDigitGameFees;
 
@@ -30,17 +29,15 @@ contract DeployLotteryEngine is Script {
     {
         (engineProxy) = deployLotteryEngine();
         (ticketProxy) = deployTicket();
+        initializeContracts(ticketProxy, engineProxy);
         contractOwner = owner;
         _twoDigitGameFees = twoDigitGameFees;
     }
 
     function deployLotteryEngine() public returns (address) {
         vm.startBroadcast(deployerKey);
-
         LotteryEngineV1 lotteryEngine = new LotteryEngineV1();
         ERC1967Proxy engineProxy = new ERC1967Proxy(address(lotteryEngine), "");
-        engineProxyAddr = address(engineProxy);
-        LotteryEngineV1(engineProxyAddr).initialize(owner, twoDigitGameFees);
         vm.stopBroadcast();
 
         return address(engineProxy);
@@ -50,9 +47,15 @@ contract DeployLotteryEngine is Script {
         vm.startBroadcast(deployerKey);
         TicketV1 ticket = new TicketV1();
         ERC1967Proxy ticketProxy = new ERC1967Proxy(address(ticket), "");
-        TicketV1(address(ticketProxy)).initialize(owner, engineProxyAddr, owner);
         vm.stopBroadcast();
 
         return address(ticketProxy);
+    }
+
+    function initializeContracts(address ticketProxy, address engineProxy) public {
+        vm.startBroadcast(deployerKey);
+        LotteryEngineV1(engineProxy).initialize(owner, ticketProxy, twoDigitGameFees);
+        TicketV1(address(ticketProxy)).initialize(owner, engineProxy, owner);
+        vm.stopBroadcast();
     }
 }

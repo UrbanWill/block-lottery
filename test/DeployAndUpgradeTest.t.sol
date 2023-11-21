@@ -106,6 +106,11 @@ contract DeployAndUpgradeTest is StdCheats, Test {
         address expectedValue = owner;
         assertEq(expectedValue, LotteryEngineV1(engineProxyAddress).owner());
     }
+
+    function testEngineV1TicketAddressIsSetCorrectly() public {
+        address expectedValue = ticketProxyAddress;
+        assertEq(expectedValue, LotteryEngineV1(engineProxyAddress).s_ticketAddress());
+    }
     /**
      * TODO:
      * Abosulutely test access control before shipping to prod
