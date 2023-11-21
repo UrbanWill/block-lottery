@@ -12,15 +12,22 @@ contract DeployLotteryEngine is Script {
     HelperConfig helperConfig = new HelperConfig();
     address owner;
     uint256 deployerKey;
+    address priceFeed;
     uint256[3] twoDigitGameFees;
 
     constructor() {
-        (uint256 _deployerKey, uint256 twoDigitGameFee1, uint256 twoDigitGameFee2, uint256 twoDigitGameFee3) =
-            helperConfig.activeNetworkConfig();
+        (
+            uint256 _deployerKey,
+            address _priceFeed,
+            uint256 twoDigitGameFee1,
+            uint256 twoDigitGameFee2,
+            uint256 twoDigitGameFee3
+        ) = helperConfig.activeNetworkConfig();
         // owner = address(uint160(uint256(deployerKey)));
+        owner = vm.addr(_deployerKey);
         deployerKey = _deployerKey;
+        priceFeed = _priceFeed;
         twoDigitGameFees = [twoDigitGameFee1, twoDigitGameFee2, twoDigitGameFee3];
-        owner = vm.addr(deployerKey);
     }
 
     function run()
@@ -54,7 +61,7 @@ contract DeployLotteryEngine is Script {
 
     function initializeContracts(address ticketProxy, address engineProxy) public {
         vm.startBroadcast(deployerKey);
-        LotteryEngineV1(engineProxy).initialize(owner, ticketProxy, twoDigitGameFees);
+        LotteryEngineV1(engineProxy).initialize(owner, ticketProxy, priceFeed, twoDigitGameFees);
         TicketV1(address(ticketProxy)).initialize(owner, engineProxy, owner);
         vm.stopBroadcast();
     }
