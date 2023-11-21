@@ -186,4 +186,14 @@ contract LotteryEngineV1Test is StdCheats, Test {
 
         assertEq(ticketV1.ownerOf(0), USER);
     }
+    ////////////////////////////////////////
+    // Price Tests                        //
+    ////////////////////////////////////////
+
+    function testLEV1GetTokenAmountFromUsd() public {
+        // If we want $100 of WETH @ $2000/WETH, that would be 0.05 WETH
+        uint256 expectedWeth = 0.05 ether;
+        uint256 amountWeth = lotteryEngineV1.getTokenAmountFromUsd(100 ether);
+        assertEq(amountWeth, expectedWeth);
+    }
 }
