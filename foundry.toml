@@ -4,5 +4,5 @@ out = "out"
 libs = ["lib"]
 ffi = true
 
-remappings = ['@openzeppelin/contracts-upgradeable=lib/openzeppelin-contracts-upgradeable/contracts']
+remappings = ['@openzeppelin/contracts-upgradeable=lib/openzeppelin-contracts-upgradeable/contracts','@chainlink/contracts/=lib/chainlink-brownie-contracts/contracts']
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
