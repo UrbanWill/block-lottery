@@ -213,4 +213,14 @@ contract LotteryEngineV1Test is StdCheats, Test {
             lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Three);
         assertEq(tierThreeResultFee, expectedTierThreeFee);
     }
+
+    function testLEV1getUsdValueFromToken() public {
+        uint256 ethAmount = 15e18;
+        // 15e18 * 2000/ETH = 30,000e18
+        uint256 expectedUsd = 30000e18;
+
+        uint256 actual = lotteryEngineV1.getUsdValueFromToken(ethAmount);
+
+        assertEq(actual, expectedUsd);
+    }
 }

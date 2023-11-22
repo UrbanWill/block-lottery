@@ -174,6 +174,10 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     ////////////////////////////////////////
     // Public & External View Functions   //
     ////////////////////////////////////////
+    /**
+     * @param usdAmountInWei USD amount in WEIi
+     * @return Token amount in WEI for a given USD amount
+     */
 
     function getTokenAmountFromUsd(uint256 usdAmountInWei) public view returns (uint256) {
         AggregatorV3Interface priceFeed = AggregatorV3Interface(s_priceFeed);
@@ -183,6 +187,21 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         // The returned value from Chainlink will be 2000 * 1e8
         // Most USD pairs have 8 decimals, so we will just pretend they all do
         return ((usdAmountInWei * PRECISION) / (uint256(price) * ADDITIONAL_FEED_PRECISION));
+    }
+
+    /**
+     * @param amount in WEI
+     * @return USD value in WEI
+     */
+    function getUsdValueFromToken(uint256 amount) public view returns (uint256) {
+        AggregatorV3Interface priceFeed = AggregatorV3Interface(s_priceFeed);
+        // 1 ETH = 1000 USD
+        // The returned value from Chainlink will be 1000 * 1e8
+        // Most USD pairs have 8 decimals, so we will just pretend they all do
+        // We want to have everything in terms of WEI, so we add 10 zeros at the end
+        (, int256 price,,,) = priceFeed.staleCheckLatestRoundData();
+
+        return ((uint256(price) * ADDITIONAL_FEED_PRECISION) * amount) / PRECISION; // ((price * 1e8) * (amount * 1e18 amount already in wei)) / 1e18
     }
 
     function getCurrentRound() public view returns (uint16) {
@@ -229,6 +248,7 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /**
      * @param gameDigit Digits of the game, currently only 2 digits is supported
      * @param gameEntryTier Tier of the game, maps to the entry fee
+     * @return Token amount in wei for a given USD Entry tier fee amount
      */
     function getGameTokenAmountFee(DataTypesLib.GameDigits gameDigit, DataTypesLib.GameEntryTier gameEntryTier)
         public
