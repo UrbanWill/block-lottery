@@ -123,9 +123,6 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         uint8 number,
         string memory tokenUri
     ) public payable roundMustBeOpen(round) returns (uint256) {
-        if (msg.value != getGameFee(gameDigit, tier)) {
-            revert LotteryEngine__IncorrectTierFee();
-        }
         if (gameDigit != DataTypesLib.GameDigits.Two) {
             revert LotteryEngine__GameDigitNotSupported();
         }
@@ -134,6 +131,12 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             if (number < MIN_NUMBER || number > MAX_TWO_DIGIT_GAME_NUMBER) {
                 revert LotteryEngine__NumberOutOfRange();
             }
+        }
+
+        uint256 gameTokenAmountFee = getGameTokenAmountFee(gameDigit, tier);
+
+        if (msg.value != gameTokenAmountFee) {
+            revert LotteryEngine__IncorrectTierFee();
         }
 
         s_totalTicketsSold++;

@@ -126,7 +126,8 @@ contract LotteryEngineV1Test is StdCheats, Test {
         uint256 expectedTicketSold = 1;
         uint16 round = 1;
         uint8 number = 33;
-        uint256 gameFee = lotteryEngineV1.getGameFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One);
+        uint256 gameFee =
+            lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One);
 
         vm.prank(USER);
         vm.expectEmit(true, true, true, true, engineProxyAddress);
@@ -151,7 +152,8 @@ contract LotteryEngineV1Test is StdCheats, Test {
         uint16 round = 1;
         uint8 number = 33;
 
-        uint256 gameFee = lotteryEngineV1.getGameFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One);
+        uint256 gameFee =
+            lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One);
 
         vm.prank(USER);
         lotteryEngineV1.buyTicket{value: gameFee}(
@@ -177,7 +179,8 @@ contract LotteryEngineV1Test is StdCheats, Test {
     function testLEV1BuyTicketMintsNft() public createNewRound {
         uint16 round = 1;
         uint8 number = 33;
-        uint256 gameFee = lotteryEngineV1.getGameFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One);
+        uint256 gameFee =
+            lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One);
 
         vm.prank(USER);
         lotteryEngineV1.buyTicket{value: gameFee}(
