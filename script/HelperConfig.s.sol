@@ -11,9 +11,10 @@ contract HelperConfig is Script {
     int256 public constant ETH_USD_PRICE = 2000e8;
     uint8 public constant DECIMALS = 8;
 
-    uint256 twoDigitGameFee1 = 0.01 ether;
-    uint256 twoDigitGameFee2 = 0.02 ether;
-    uint256 twoDigitGameFee3 = 0.03 ether;
+    // 1 ETH = 1 USD
+    uint256 twoDigitGameFee1 = 1 ether;
+    uint256 twoDigitGameFee2 = 2 ether;
+    uint256 twoDigitGameFee3 = 3 ether;
 
     constructor() {
         if (block.chainid == 11155111) {

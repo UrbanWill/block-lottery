@@ -196,4 +196,21 @@ contract LotteryEngineV1Test is StdCheats, Test {
         uint256 amountWeth = lotteryEngineV1.getTokenAmountFromUsd(100 ether);
         assertEq(amountWeth, expectedWeth);
     }
+
+    function testLEV1GetGameTokenAmountFee() public {
+        uint256 expectedTierOneFee = 0.0005 ether;
+        uint256 tierOneResultFee =
+            lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One);
+        assertEq(tierOneResultFee, expectedTierOneFee);
+
+        uint256 expectedTierTwoFee = 0.001 ether;
+        uint256 tierTwoResultFee =
+            lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Two);
+        assertEq(tierTwoResultFee, expectedTierTwoFee);
+
+        uint256 expectedTierThreeFee = 0.0015 ether;
+        uint256 tierThreeResultFee =
+            lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Three);
+        assertEq(tierThreeResultFee, expectedTierThreeFee);
+    }
 }

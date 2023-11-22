@@ -226,6 +226,19 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         return s_gameEntryFees[gameDigit].feePerTier[gameEntryTier];
     }
 
+    /**
+     * @param gameDigit Digits of the game, currently only 2 digits is supported
+     * @param gameEntryTier Tier of the game, maps to the entry fee
+     */
+    function getGameTokenAmountFee(DataTypesLib.GameDigits gameDigit, DataTypesLib.GameEntryTier gameEntryTier)
+        public
+        view
+        returns (uint256)
+    {
+        uint256 fee = s_gameEntryFees[gameDigit].feePerTier[gameEntryTier];
+        return getTokenAmountFromUsd(fee);
+    }
+
     function version() public pure returns (uint8) {
         return 1;
     }
