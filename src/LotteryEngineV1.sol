@@ -138,7 +138,7 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
      * @param _twoDigitsWinnerNumber Winning number for the round
      * @dev This function will eventually be refactored to inlcude the 3 digits game
      */
-    function postResults(uint8 _twoDigitsWinnerNumber) public onlyOwner {
+    function postRoundResults(uint8 _twoDigitsWinnerNumber) public onlyOwner {
         if (s_roundStats[s_roundCounter].status != DataTypesLib.GameStatus.Paused) {
             revert LotteryEngine__RoundMustBePaused();
         }

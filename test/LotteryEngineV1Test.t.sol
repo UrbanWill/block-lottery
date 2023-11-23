@@ -129,7 +129,7 @@ contract LotteryEngineV1Test is StdCheats, Test {
 
         vm.prank(LotteryEngineV1(engineProxyAddress).owner());
         vm.expectRevert(LotteryEngineV1.LotteryEngine__RoundMustBePaused.selector);
-        lotteryEngineV1.postResults(twoDigitNumber);
+        lotteryEngineV1.postRoundResults(twoDigitNumber);
     }
 
     function testLEV1PostResultsUpdatesRoundStatusAndEmits(uint8 twoDigitNumber) public createNewRound {
@@ -143,7 +143,7 @@ contract LotteryEngineV1Test is StdCheats, Test {
 
         vm.expectEmit(true, true, false, false, engineProxyAddress);
         emit RoundReultsPosted(round, block.timestamp);
-        lotteryEngineV1.postResults(twoDigitNumber);
+        lotteryEngineV1.postRoundResults(twoDigitNumber);
         vm.stopPrank();
 
         (DataTypesLib.GameStatus status, uint8 twoDigitsWinnerNumber,, uint256 claimableAt) =
@@ -167,7 +167,7 @@ contract LotteryEngineV1Test is StdCheats, Test {
 
         vm.startPrank(LotteryEngineV1(engineProxyAddress).owner());
         lotteryEngineV1.pauseRound();
-        lotteryEngineV1.postResults(roundOneWinner);
+        lotteryEngineV1.postRoundResults(roundOneWinner);
         vm.stopPrank();
 
         // Round one assertions:
@@ -188,7 +188,7 @@ contract LotteryEngineV1Test is StdCheats, Test {
         lotteryEngineV1.createRound();
         lotteryEngineV1.pauseRound();
 
-        lotteryEngineV1.postResults(twoDigitWinnerNumber);
+        lotteryEngineV1.postRoundResults(twoDigitWinnerNumber);
         vm.stopPrank();
 
         // Round two assertions:
