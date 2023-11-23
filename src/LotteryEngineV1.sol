@@ -259,8 +259,23 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         return s_roundCounter;
     }
 
-    function getRoundStatus(uint16 round) public view returns (DataTypesLib.GameStatus) {
-        return s_roundStats[round].status;
+    function getRoundInfo(uint16 round)
+        public
+        view
+        returns (
+            DataTypesLib.GameStatus status,
+            uint8 twoDigitsWinnerNumber,
+            uint16 threeDigitsWinnerNumber,
+            uint256 claimableAt
+        )
+    {
+        DataTypesLib.RoundStatus storage roundStats = s_roundStats[round];
+        return (
+            roundStats.status,
+            roundStats.twoDigitsWinnerNumber,
+            roundStats.threeDigitsWinnerNumber,
+            roundStats.clamableAt
+        );
     }
 
     /**
