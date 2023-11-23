@@ -20,6 +20,7 @@ contract LotteryEngineV1Test is StdCheats, Test {
     string constant PUG_URI = "ipfs://bafybeig37ioir76s7mg5oobetncojcm3c3hxasyd4rvid4jqhy4gkaheg4/?filename=0-PUG.json";
 
     uint256 ethUsdOraclePrice = 2000;
+    uint16 CLAIMABLE_DELAY = 1 hours;
 
     function setUp() public {
         deployLotteryEngine = new DeployLotteryEngine();
@@ -36,6 +37,7 @@ contract LotteryEngineV1Test is StdCheats, Test {
 
     event RoundCreated(uint16 indexed round, uint256 timestamp);
     event RoundPaused(uint16 indexed round, uint256 timestamp);
+    event RoundReultsPosted(uint16 indexed round, uint256 timestamp);
     event TicketBought(
         uint16 indexed round, DataTypesLib.GameEntryTier indexed tier, uint8 indexed number, address player
     );
@@ -79,11 +81,12 @@ contract LotteryEngineV1Test is StdCheats, Test {
 
     function testLEV1RoundIsCreatedWithCorrectStatus() public createNewRound {
         uint256 expectedStatus = uint256(DataTypesLib.GameStatus.Open);
-        uint256 roundStatus = uint256(lotteryEngineV1.getRoundStatus(1));
+        (DataTypesLib.GameStatus status,,,) = lotteryEngineV1.getRoundInfo(1);
+        uint256 roundStatus = uint256(status);
         assertEq(roundStatus, expectedStatus);
     }
     ////////////////////////////////////////
-    // pauseRound Tests                  //
+    // pauseRound Tests                   //
     ////////////////////////////////////////
 
     function testLEV1PauseRoundRevertsWhenRoundIsNotOpen() public {
@@ -106,9 +109,98 @@ contract LotteryEngineV1Test is StdCheats, Test {
         emit RoundPaused(round, block.timestamp);
         lotteryEngineV1.pauseRound();
 
-        uint256 roundStatus = uint256(lotteryEngineV1.getRoundStatus(round));
+        (DataTypesLib.GameStatus status,,,) = lotteryEngineV1.getRoundInfo(1);
+
+        uint256 roundStatus = uint256(status);
         assertEq(roundStatus, expectedStatus);
     }
+
+    ////////////////////////////////////////
+    // postResults Tests                  //
+    ////////////////////////////////////////
+
+    function testLEV1PostResultsRevertsNotOwner() public createNewRound {
+        vm.expectRevert();
+        lotteryEngineV1.pauseRound();
+    }
+
+    function testLEV1PostResultsRevertWhenRoundIsNotPaused() public {
+        uint8 twoDigitNumber = 33;
+
+        vm.prank(LotteryEngineV1(engineProxyAddress).owner());
+        vm.expectRevert(LotteryEngineV1.LotteryEngine__RoundMustBePaused.selector);
+        lotteryEngineV1.postResults(twoDigitNumber);
+    }
+
+    function testLEV1PostResultsUpdatesRoundStatusAndEmits(uint8 twoDigitNumber) public createNewRound {
+        twoDigitNumber = uint8(bound(twoDigitNumber, 1, 99));
+        uint16 round = 1;
+        uint256 expectedStatus = uint256(DataTypesLib.GameStatus.Claimable);
+        uint256 expectedClaimableAt = block.timestamp + CLAIMABLE_DELAY;
+
+        vm.startPrank(LotteryEngineV1(engineProxyAddress).owner());
+        lotteryEngineV1.pauseRound();
+
+        vm.expectEmit(true, true, false, false, engineProxyAddress);
+        emit RoundReultsPosted(round, block.timestamp);
+        lotteryEngineV1.postResults(twoDigitNumber);
+        vm.stopPrank();
+
+        (DataTypesLib.GameStatus status, uint8 twoDigitsWinnerNumber,, uint256 claimableAt) =
+            lotteryEngineV1.getRoundInfo(round);
+        uint256 roundStatus = uint256(status);
+
+        assertEq(roundStatus, expectedStatus);
+        assertEq(twoDigitsWinnerNumber, twoDigitNumber);
+        assertEq(claimableAt, expectedClaimableAt);
+    }
+
+    function testLEV1PostResultsUpdatesCorrectRound(uint8 twoDigitWinnerNumber) public createNewRound {
+        twoDigitWinnerNumber = uint8(bound(twoDigitWinnerNumber, 1, 99));
+        uint256 expectedStatus = uint256(DataTypesLib.GameStatus.Claimable);
+
+        // Creates and closes a phony round 1, a bit repetitive but it's the only way to test this.
+        // Consider refactoring this in the future in favour of invariant testing.
+        uint8 roundOneWinner = 22;
+
+        uint256 expectedRoundOneClaimableAt = block.timestamp + CLAIMABLE_DELAY;
+
+        vm.startPrank(LotteryEngineV1(engineProxyAddress).owner());
+        lotteryEngineV1.pauseRound();
+        lotteryEngineV1.postResults(roundOneWinner);
+        vm.stopPrank();
+
+        // Round one assertions:
+        (DataTypesLib.GameStatus statusRoundOne, uint8 twoDigitsWinnerNumberRoundOne,, uint256 claimableAtRoundOne) =
+            lotteryEngineV1.getRoundInfo(1);
+        uint256 roundOneStatus = uint256(statusRoundOne);
+
+        assertEq(roundOneStatus, expectedStatus);
+        assertEq(twoDigitsWinnerNumberRoundOne, roundOneWinner);
+        assertEq(claimableAtRoundOne, expectedRoundOneClaimableAt);
+
+        // Creates and closes round 2
+        vm.warp(100);
+        uint16 roundTwo = 2;
+        uint256 expectedClaimableAt = block.timestamp + CLAIMABLE_DELAY;
+
+        vm.startPrank(LotteryEngineV1(engineProxyAddress).owner());
+        lotteryEngineV1.createRound();
+        lotteryEngineV1.pauseRound();
+
+        lotteryEngineV1.postResults(twoDigitWinnerNumber);
+        vm.stopPrank();
+
+        // Round two assertions:
+        (DataTypesLib.GameStatus status, uint8 twoDigitsWinnerNumber,, uint256 claimableAt) =
+            lotteryEngineV1.getRoundInfo(roundTwo);
+        uint256 roundStatus = uint256(status);
+
+        assertEq(roundStatus, expectedStatus);
+        assertEq(twoDigitsWinnerNumber, twoDigitWinnerNumber);
+        assertEq(claimableAt, expectedClaimableAt);
+    }
+
     ////////////////////////////////////////
     // buyTicket Tests                    //
     ////////////////////////////////////////
