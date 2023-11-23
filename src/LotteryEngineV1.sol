@@ -107,6 +107,13 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         s_roundCounter++;
         s_roundStats[s_roundCounter].status = DataTypesLib.GameStatus.Open;
     }
+
+    /**
+     * TODO:
+     * Add close round
+     * Add claim winnings
+     */
+
     /**
      * @notice Buy a ticket for a given round, mints a new ticket NFT
      * @param round Round number
