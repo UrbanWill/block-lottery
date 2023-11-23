@@ -19,6 +19,8 @@ contract LotteryEngineV1Test is StdCheats, Test {
     address USER = makeAddr("user");
     string constant PUG_URI = "ipfs://bafybeig37ioir76s7mg5oobetncojcm3c3hxasyd4rvid4jqhy4gkaheg4/?filename=0-PUG.json";
 
+    uint256 ethUsdOraclePrice = 2000;
+
     function setUp() public {
         deployLotteryEngine = new DeployLotteryEngine();
         (engineProxyAddress, ticketProxyAddress,,) = deployLotteryEngine.run();
@@ -192,19 +194,33 @@ contract LotteryEngineV1Test is StdCheats, Test {
     // Price Tests                        //
     ////////////////////////////////////////
 
-    function testLEV1GetTokenAmountFromUsd() public {
+    function testLEV1GetTokenAmountFromUsd(uint256 usdAmountInWei) public {
+        vm.assume(usdAmountInWei < 1000 ether);
+
+        /**
+         *  @notice: Keeping this here for reference:
+         */
         // If we want $100 of WETH @ $2000/WETH, that would be 0.05 WETH
-        uint256 expectedWeth = 0.05 ether;
-        uint256 amountWeth = lotteryEngineV1.getTokenAmountFromUsd(100 ether);
+        // uint256 expectedWeth = 0.05 ether;
+        // uint256 amountWeth = lotteryEngineV1.getTokenAmountFromUsd(100 ether);
+        // assertEq(amountWeth, expectedWeth);
+
+        uint256 expectedWeth = usdAmountInWei / ethUsdOraclePrice;
+        uint256 amountWeth = lotteryEngineV1.getTokenAmountFromUsd(usdAmountInWei);
         assertEq(amountWeth, expectedWeth);
     }
 
     function testLEV1GetGameTokenAmountFee() public {
-        uint256 expectedTierOneFee = 0.0005 ether;
+        uint256 expectedTierOneFee =
+            lotteryEngineV1.getGameFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One) / ethUsdOraclePrice;
+
         uint256 tierOneResultFee =
             lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One);
         assertEq(tierOneResultFee, expectedTierOneFee);
-
+        /**
+         * @dev: expectedTierTwoFee and expectedTierThreeFee Does the same as expectedTierOneFee but not dynamic.
+         * If fee value change in HelperConfig, these will need to be updated.
+         */
         uint256 expectedTierTwoFee = 0.001 ether;
         uint256 tierTwoResultFee =
             lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Two);
@@ -216,11 +232,22 @@ contract LotteryEngineV1Test is StdCheats, Test {
         assertEq(tierThreeResultFee, expectedTierThreeFee);
     }
 
-    function testLEV1getUsdValueFromToken() public {
-        uint256 ethAmount = 15e18;
-        // 15e18 * 2000/ETH = 30,000e18
-        uint256 expectedUsd = 30000e18;
+    function testLEV1getUsdValueFromToken(uint256 ethAmount) public {
+        vm.assume(ethAmount < 1000 ether);
 
+        /**
+         *  @dev: Keeping this here for reference:
+         */
+        // uint256 ethAmount = 15e18;
+        // // 15e18 * 2000/ETH = 30,000e18
+        // uint256 expectedUsd = 30000e18;
+        // uint256 actual = lotteryEngineV1.getUsdValueFromToken(ethAmount);
+
+        // assertEq(actual, expectedUsd);
+
+        // uint256 ethAmount = 15e18;
+        // 15e18 * 2000/ETH = 30,000e18
+        uint256 expectedUsd = ethAmount * ethUsdOraclePrice;
         uint256 actual = lotteryEngineV1.getUsdValueFromToken(ethAmount);
 
         assertEq(actual, expectedUsd);

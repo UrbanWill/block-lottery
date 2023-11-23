@@ -265,7 +265,7 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         view
         returns (uint256)
     {
-        uint256 fee = s_gameEntryFees[gameDigit].feePerTier[gameEntryTier];
+        uint256 fee = getGameFee(gameDigit, gameEntryTier);
         return getTokenAmountFromUsd(fee);
     }
 
