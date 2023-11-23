@@ -34,6 +34,8 @@ contract LotteryEngineV1Test is StdCheats, Test {
     // Events                             //
     ////////////////////////////////////////
 
+    event RoundCreated(uint16 indexed round, uint256 timestamp);
+    event RoundPaused(uint16 indexed round, uint256 timestamp);
     event TicketBought(
         uint16 indexed round, DataTypesLib.GameEntryTier indexed tier, uint8 indexed number, address player
     );
@@ -62,10 +64,16 @@ contract LotteryEngineV1Test is StdCheats, Test {
         lotteryEngineV1.createRound();
     }
 
-    function testLEV1CreateRoundWorks() public createNewRound {
-        uint16 currentRound = lotteryEngineV1.getCurrentRound();
+    function testLEV1CreateRoundWorksAndEmmits() public {
         uint16 expectedRound = 1;
 
+        vm.prank(LotteryEngineV1(engineProxyAddress).owner());
+        vm.expectEmit(true, true, false, false, engineProxyAddress);
+        emit RoundCreated(expectedRound, block.timestamp);
+
+        lotteryEngineV1.createRound();
+
+        uint16 currentRound = lotteryEngineV1.getCurrentRound();
         assertEq(currentRound, expectedRound);
     }
 
@@ -74,7 +82,33 @@ contract LotteryEngineV1Test is StdCheats, Test {
         uint256 roundStatus = uint256(lotteryEngineV1.getRoundStatus(1));
         assertEq(roundStatus, expectedStatus);
     }
+    ////////////////////////////////////////
+    // pauseRound Tests                  //
+    ////////////////////////////////////////
 
+    function testLEV1PauseRoundRevertsWhenRoundIsNotOpen() public {
+        vm.prank(LotteryEngineV1(engineProxyAddress).owner());
+        vm.expectRevert(LotteryEngineV1.LotteryEngine__RoundMustBeOpen.selector);
+        lotteryEngineV1.pauseRound();
+    }
+
+    function testLEV1PauseRoundRevertsNotOwner() public createNewRound {
+        vm.expectRevert();
+        lotteryEngineV1.pauseRound();
+    }
+
+    function testLEV1PauseRoundWorksAndEmmits() public createNewRound {
+        uint16 round = 1;
+        uint256 expectedStatus = uint256(DataTypesLib.GameStatus.Paused);
+
+        vm.expectEmit(true, true, false, false, engineProxyAddress);
+        vm.prank(LotteryEngineV1(engineProxyAddress).owner());
+        emit RoundPaused(round, block.timestamp);
+        lotteryEngineV1.pauseRound();
+
+        uint256 roundStatus = uint256(lotteryEngineV1.getRoundStatus(round));
+        assertEq(roundStatus, expectedStatus);
+    }
     ////////////////////////////////////////
     // buyTicket Tests                    //
     ////////////////////////////////////////
@@ -83,6 +117,16 @@ contract LotteryEngineV1Test is StdCheats, Test {
         vm.expectRevert(LotteryEngineV1.LotteryEngine__RoundMustBeOpen.selector);
         uint16 round = 1;
         uint8 number = 33;
+        lotteryEngineV1.buyTicket(round, DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One, number, PUG_URI);
+    }
+
+    function testLEV1BuyTicketRevertsWhenRoundIsPaused() public createNewRound {
+        uint16 round = 1;
+        uint8 number = 33;
+
+        vm.prank(LotteryEngineV1(engineProxyAddress).owner());
+        lotteryEngineV1.pauseRound();
+        vm.expectRevert(LotteryEngineV1.LotteryEngine__RoundMustBeOpen.selector);
         lotteryEngineV1.buyTicket(round, DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One, number, PUG_URI);
     }
 
