@@ -36,6 +36,8 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     // Events                             //
     ////////////////////////////////////////
 
+    event RoundCreated(uint16 indexed round, uint256 timestamp);
+    event RoundPaused(uint16 indexed round, uint256 timestamp);
     event TicketBought(
         uint16 indexed round, DataTypesLib.GameEntryTier indexed tier, uint8 indexed number, address player
     );
@@ -49,6 +51,7 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error LotteryEngine__IncorrectTierFee();
     error LotteryEngine__GameDigitNotSupported();
     error LotteryEngine__NumberOutOfRange();
+    error LotteryEngine__RoundAlreadyPaused();
     ////////////////////////////////////////
     // Modifiers                          //
     ////////////////////////////////////////
@@ -106,6 +109,23 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     function createRound() public onlyOwner canOpenRound {
         s_roundCounter++;
         s_roundStats[s_roundCounter].status = DataTypesLib.GameStatus.Open;
+
+        emit RoundCreated(s_roundCounter, block.timestamp);
+    }
+
+    /**
+     * @dev Pauses the current round
+     * @notice Pause the ticket sales for the current round on the day of the draw
+     * @notice This function will eventually be refactored to be called by a Chainlink automator
+     */
+    function pauseRound() public onlyOwner roundMustBeOpen(s_roundCounter) {
+        if (s_roundStats[s_roundCounter].status == DataTypesLib.GameStatus.Paused) {
+            revert LotteryEngine__RoundAlreadyPaused();
+        }
+
+        s_roundStats[s_roundCounter].status = DataTypesLib.GameStatus.Paused;
+
+        emit RoundPaused(s_roundCounter, block.timestamp);
     }
 
     /**
