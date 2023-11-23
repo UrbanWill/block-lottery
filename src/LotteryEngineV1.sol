@@ -19,6 +19,7 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     // State Variables                    //
     ////////////////////////////////////////
 
+    uint16 private constant CLAIMABLE_DELAY = 1 hours;
     uint8 private constant MIN_NUMBER = 1;
     uint8 private constant MAX_TWO_DIGIT_GAME_NUMBER = 99;
     uint256 private constant ADDITIONAL_FEED_PRECISION = 1e10;
@@ -38,6 +39,7 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     event RoundCreated(uint16 indexed round, uint256 timestamp);
     event RoundPaused(uint16 indexed round, uint256 timestamp);
+    event RoundReultsPosted(uint16 indexed round, uint256 timestamp);
     event TicketBought(
         uint16 indexed round, DataTypesLib.GameEntryTier indexed tier, uint8 indexed number, address player
     );
@@ -52,6 +54,7 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error LotteryEngine__GameDigitNotSupported();
     error LotteryEngine__NumberOutOfRange();
     error LotteryEngine__RoundAlreadyPaused();
+    error LotteryEngine__RoundMustBePaused();
     ////////////////////////////////////////
     // Modifiers                          //
     ////////////////////////////////////////
@@ -129,8 +132,26 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     /**
+     * @notice Post the results of the round
+     * @notice This function is called by a human and therefore subject to human error,
+     * this is the reason for the 1 hour delay before the round is claimable, to fix possible human errors
+     * @param _twoDigitsWinnerNumber Winning number for the round
+     * @dev This function will eventually be refactored to inlcude the 3 digits game
+     */
+    function postResults(uint8 _twoDigitsWinnerNumber) public onlyOwner {
+        if (s_roundStats[s_roundCounter].status != DataTypesLib.GameStatus.Paused) {
+            revert LotteryEngine__RoundMustBePaused();
+        }
+        s_roundStats[s_roundCounter].status = DataTypesLib.GameStatus.Claimable;
+        s_roundStats[s_roundCounter].twoDigitsWinnerNumber = _twoDigitsWinnerNumber;
+        s_roundStats[s_roundCounter].clamableAt = block.timestamp + CLAIMABLE_DELAY;
+
+        emit RoundReultsPosted(s_roundCounter, block.timestamp);
+    }
+
+    /**
      * TODO:
-     * Add close round
+     * Amend results
      * Add claim winnings
      */
 

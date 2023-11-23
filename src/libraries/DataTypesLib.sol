@@ -22,15 +22,16 @@ library DataTypesLib {
 
     struct RoundStatus {
         GameStatus status;
+        uint8 twoDigitsWinnerNumber;
+        uint16 threeDigitsWinnerNumber;
+        uint256 clamableAt;
         mapping(GameEntryTier => StatsPerGameTier) statsPerGameTier;
-        uint8 winnerNumber;
     }
 
     struct StatsPerGameTier {
+        uint8 winnersClaimedCount;
         uint256 tierTicketCount;
         mapping(uint8 => uint256) ticketCountPerNumber;
-        uint8 winnerCount;
-        uint8 winnersClaimedCount;
     }
 
     enum GameEntryTier {
