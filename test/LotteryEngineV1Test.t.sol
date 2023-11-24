@@ -40,9 +40,13 @@ contract LotteryEngineV1Test is StdCheats, Test {
     event RoundReultsPosted(uint16 indexed round, uint256 timestamp);
     event RoundReultsAmended(uint16 indexed round, uint8 twoDigitsWinnerNumber, uint256 timestamp);
     event TicketBought(
-        uint16 indexed round, DataTypesLib.GameEntryTier indexed tier, uint8 indexed number, address player
+        uint16 indexed round,
+        DataTypesLib.GameDigits,
+        DataTypesLib.GameType indexed,
+        DataTypesLib.GameEntryTier indexed tier,
+        uint8 number,
+        address player
     );
-
     ////////////////////////////////////////
     // Modifiers & Helpers                //
     ////////////////////////////////////////
@@ -335,7 +339,7 @@ contract LotteryEngineV1Test is StdCheats, Test {
 
         vm.prank(USER);
         vm.expectEmit(true, true, true, true, engineProxyAddress);
-        emit TicketBought(round, tier, uint8(number), USER);
+        emit TicketBought(round, DataTypesLib.GameDigits.Two, gameType, tier, uint8(number), USER);
         lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(round, gameType, tier, uint8(number), PUG_URI);
 
         assertEq(lotteryEngineV1.getTierTicketCountSoldPerRound(round, tier), expectedTicketSold);

@@ -42,7 +42,12 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     event RoundReultsPosted(uint16 indexed round, uint256 timestamp);
     event RoundReultsAmended(uint16 indexed round, uint8 twoDigitsWinnerNumber, uint256 timestamp);
     event TicketBought(
-        uint16 indexed round, DataTypesLib.GameEntryTier indexed tier, uint8 indexed number, address player
+        uint16 indexed round,
+        DataTypesLib.GameDigits,
+        DataTypesLib.GameType indexed,
+        DataTypesLib.GameEntryTier indexed tier,
+        uint8 number,
+        address player
     );
 
     ////////////////////////////////////////
@@ -202,7 +207,7 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
         uint256 tokenId = _mintTicket(round, DataTypesLib.GameDigits.Two, gameType, tier, number, tokenUri);
 
-        emit TicketBought(round, tier, number, msg.sender);
+        emit TicketBought(round, DataTypesLib.GameDigits.Two, gameType, tier, number, msg.sender);
 
         return tokenId;
     }
