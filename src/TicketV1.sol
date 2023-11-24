@@ -29,6 +29,7 @@ contract TicketV1 is
         bool claimed;
         uint16 round;
         DataTypesLib.GameDigits gameDigit;
+        DataTypesLib.GameType gameType;
         DataTypesLib.GameEntryTier tier;
         uint8 number;
     }
@@ -54,6 +55,7 @@ contract TicketV1 is
         address to,
         uint16 round,
         DataTypesLib.GameDigits gameDigit,
+        DataTypesLib.GameType gameType,
         DataTypesLib.GameEntryTier tier,
         uint8 number,
         string memory uri
@@ -63,7 +65,15 @@ contract TicketV1 is
         _safeMint(to, tokenId);
         _setTokenURI(tokenId, uri);
         _setTokenInfo(
-            tokenId, TokenInfo({claimed: false, round: round, gameDigit: gameDigit, tier: tier, number: number})
+            tokenId,
+            TokenInfo({
+                claimed: false,
+                round: round,
+                gameDigit: gameDigit,
+                gameType: gameType,
+                tier: tier,
+                number: number
+            })
         );
 
         return tokenId;

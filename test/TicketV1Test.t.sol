@@ -22,6 +22,7 @@ contract TicketV1Test is StdCheats, Test {
     uint16 constant ROUND = 1;
     DataTypesLib.GameDigits constant GAME_DIGITS = DataTypesLib.GameDigits.Two;
     DataTypesLib.GameEntryTier constant GAME_ENTRY_TIER = DataTypesLib.GameEntryTier.One;
+    DataTypesLib.GameType constant GAME_TYPE = DataTypesLib.GameType.Lower;
     uint8 constant NUMBER = 1;
     string constant URI = "test";
 
@@ -37,23 +38,24 @@ contract TicketV1Test is StdCheats, Test {
 
     function testTicketV1SafeMintRevertsNotMinterRole() public {
         vm.expectRevert();
-        ticketV1.safeMint(USER, ROUND, GAME_DIGITS, GAME_ENTRY_TIER, NUMBER, URI);
+        ticketV1.safeMint(USER, ROUND, GAME_DIGITS, GAME_TYPE, GAME_ENTRY_TIER, NUMBER, URI);
     }
 
     function testTicketV1SafeMintWorks() public {
         vm.prank(engineProxyAddress);
-        ticketV1.safeMint(USER, ROUND, GAME_DIGITS, GAME_ENTRY_TIER, NUMBER, URI);
+        ticketV1.safeMint(USER, ROUND, GAME_DIGITS, GAME_TYPE, GAME_ENTRY_TIER, NUMBER, URI);
         assertEq(ticketV1.ownerOf(0), USER);
     }
 
     function testTicketV1SafeMintSetTokenDataCorrectly() public {
         vm.prank(engineProxyAddress);
-        uint256 tokenIdOne = ticketV1.safeMint(USER, ROUND, GAME_DIGITS, GAME_ENTRY_TIER, NUMBER, URI);
+        uint256 tokenIdOne = ticketV1.safeMint(USER, ROUND, GAME_DIGITS, GAME_TYPE, GAME_ENTRY_TIER, NUMBER, URI);
 
         (
             bool claimed,
             uint16 round,
             DataTypesLib.GameDigits gameDigits,
+            DataTypesLib.GameType gameType,
             DataTypesLib.GameEntryTier entryTier,
             uint8 number
         ) = ticketV1.tokenInfo(tokenIdOne);
@@ -62,6 +64,7 @@ contract TicketV1Test is StdCheats, Test {
         assertEq(claimed, false);
         assertEq(round, ROUND);
         assertEq(uint256(gameDigits), uint256(GAME_DIGITS));
+        assertEq(uint256(gameType), uint256(GAME_TYPE));
         assertEq(uint256(entryTier), uint256(GAME_ENTRY_TIER));
         assertEq(number, NUMBER);
         assertEq(ticketIdOneUri, URI);
@@ -70,9 +73,10 @@ contract TicketV1Test is StdCheats, Test {
         string memory secondUri = "test2";
 
         vm.prank(engineProxyAddress);
-        uint256 tokenIdTwo = ticketV1.safeMint(USER, ROUND, GAME_DIGITS, GAME_ENTRY_TIER, secondNumber, secondUri);
+        uint256 tokenIdTwo =
+            ticketV1.safeMint(USER, ROUND, GAME_DIGITS, GAME_TYPE, GAME_ENTRY_TIER, secondNumber, secondUri);
 
-        (,,,, uint8 numberTwo) = ticketV1.tokenInfo(tokenIdTwo);
+        (,,,,, uint8 numberTwo) = ticketV1.tokenInfo(tokenIdTwo);
         string memory ticketIdTwoUri = ticketV1.tokenURI(tokenIdTwo);
 
         assertEq(numberTwo, secondNumber);

@@ -7,9 +7,10 @@ library DataTypesLib {
         Three // To be implemented in V2
     }
 
-    enum TwoDigitGameType {
+    enum GameType {
         Lower, // Two digits game will default to lower game type
-        Upper
+        Upper,
+        Reverse
     }
 
     enum GameStatus {
