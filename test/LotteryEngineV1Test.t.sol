@@ -323,19 +323,35 @@ contract LotteryEngineV1Test is StdCheats, Test {
         );
     }
 
+    // TODO: Split this test into multiple tests, "Reverse" game types and "Regular" game types
     function testLEV1BuyTwoDigitsUpdatesRoundStatsAndEmits(uint256 _gameType, uint256 _tier, uint256 number)
         public
         createNewRound
     {
         _tier = bound(_tier, 0, 2);
-        _gameType = bound(_gameType, 0, 2);
+        _gameType = bound(_gameType, 0, 3);
         number = bound(number, 1, 99);
 
+        uint8 reversedNumber = lotteryEngineV1.reverseTwoDigitUint8(uint8(number));
         uint16 round = 1;
         uint256 expectedTicketSold = 1;
+        uint256 expectedNumberSold = 1;
         DataTypesLib.GameType gameType = DataTypesLib.GameType(_gameType);
         DataTypesLib.GameEntryTier tier = DataTypesLib.GameEntryTier(_tier);
-        uint256 gameFee = lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, tier);
+        uint256 gameFee = lotteryEngineV1.calculateTwoDigitsTicketFee(DataTypesLib.GameDigits.Two, gameType, tier);
+
+        if (gameType == DataTypesLib.GameType.Upper || gameType == DataTypesLib.GameType.Reverse) {
+            expectedTicketSold = 2;
+        } else if (gameType == DataTypesLib.GameType.UpperReverse) {
+            expectedTicketSold = 4;
+        }
+
+        if (
+            number == reversedNumber
+                && (gameType == DataTypesLib.GameType.Reverse || gameType == DataTypesLib.GameType.UpperReverse)
+        ) {
+            expectedNumberSold = 2;
+        }
 
         vm.prank(USER);
         vm.expectEmit(true, true, true, true, engineProxyAddress);
@@ -343,7 +359,9 @@ contract LotteryEngineV1Test is StdCheats, Test {
         lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(round, gameType, tier, uint8(number), PUG_URI);
 
         assertEq(lotteryEngineV1.getTierTicketCountSoldPerRound(round, tier), expectedTicketSold);
-        assertEq(lotteryEngineV1.getTierNumberSoldCountPerRound(round, tier, uint8(number)), expectedTicketSold);
+        assertEq(
+            lotteryEngineV1.getTwoDigitsNumberCountPerType(round, gameType, tier, uint8(number)), expectedNumberSold
+        );
 
         assertEq(address(engineProxyAddress).balance, gameFee);
     }
@@ -358,7 +376,7 @@ contract LotteryEngineV1Test is StdCheats, Test {
 
         vm.prank(USER);
         lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(
-            round, DataTypesLib.GameType.Reverse, DataTypesLib.GameEntryTier.One, uint8(number), PUG_URI
+            round, DataTypesLib.GameType.Lower, DataTypesLib.GameEntryTier.One, uint8(number), PUG_URI
         );
 
         assertEq(
@@ -367,34 +385,40 @@ contract LotteryEngineV1Test is StdCheats, Test {
         assertEq(
             lotteryEngineV1.getTierTicketCountSoldPerRound(round, DataTypesLib.GameEntryTier.Three), expectedTicketSold
         );
+
         assertEq(
-            lotteryEngineV1.getTierNumberSoldCountPerRound(round, DataTypesLib.GameEntryTier.Two, uint8(number)),
+            lotteryEngineV1.getTwoDigitsNumberCountPerType(
+                round, DataTypesLib.GameType.Reverse, DataTypesLib.GameEntryTier.Two, uint8(number)
+            ),
             expectedTicketSold
         );
+
         assertEq(
-            lotteryEngineV1.getTierNumberSoldCountPerRound(round, DataTypesLib.GameEntryTier.Three, uint8(number)),
+            lotteryEngineV1.getTwoDigitsNumberCountPerType(
+                round, DataTypesLib.GameType.Reverse, DataTypesLib.GameEntryTier.Three, uint8(number)
+            ),
             expectedTicketSold
         );
     }
 
     function testLEV1BuyTwoDigitsMintsNft(uint256 _gameType, uint256 _tier, uint256 number) public createNewRound {
         _tier = bound(_tier, 0, 2);
-        _gameType = bound(_gameType, 0, 2);
+        _gameType = bound(_gameType, 0, 3);
         number = bound(number, 1, 99);
 
         uint16 round = 1;
         DataTypesLib.GameType gameType = DataTypesLib.GameType(_gameType);
         DataTypesLib.GameEntryTier tier = DataTypesLib.GameEntryTier(_tier);
-        uint256 gameFee = lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, tier);
+        uint256 gameFee = lotteryEngineV1.calculateTwoDigitsTicketFee(DataTypesLib.GameDigits.Two, gameType, tier);
 
         vm.prank(USER);
         lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(round, gameType, tier, uint8(number), PUG_URI);
 
         assertEq(ticketV1.ownerOf(0), USER);
     }
-    ////////////////////////////////////////
-    // Price Tests                        //
-    ////////////////////////////////////////
+    // ////////////////////////////////////////
+    // // Price Tests                        //
+    // ////////////////////////////////////////
 
     function testLEV1GetTokenAmountFromUsd(uint256 usdAmountInWei) public {
         vm.assume(usdAmountInWei < 1000 ether);
@@ -453,5 +477,28 @@ contract LotteryEngineV1Test is StdCheats, Test {
         uint256 actual = lotteryEngineV1.getUsdValueFromToken(ethAmount);
 
         assertEq(actual, expectedUsd);
+    }
+
+    function testLEV1CalculateTwoDigitsTicketFee() public {
+        uint256 expectedLowerFee =
+            lotteryEngineV1.getGameFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One) / ethUsdOraclePrice;
+
+        uint256 actualLowerFee = lotteryEngineV1.calculateTwoDigitsTicketFee(
+            DataTypesLib.GameDigits.Two, DataTypesLib.GameType.Lower, DataTypesLib.GameEntryTier.One
+        );
+        uint256 actualUpperFee = lotteryEngineV1.calculateTwoDigitsTicketFee(
+            DataTypesLib.GameDigits.Two, DataTypesLib.GameType.Upper, DataTypesLib.GameEntryTier.One
+        );
+        uint256 actualReverseFee = lotteryEngineV1.calculateTwoDigitsTicketFee(
+            DataTypesLib.GameDigits.Two, DataTypesLib.GameType.Upper, DataTypesLib.GameEntryTier.One
+        );
+        uint256 actualUpperReverseFee = lotteryEngineV1.calculateTwoDigitsTicketFee(
+            DataTypesLib.GameDigits.Two, DataTypesLib.GameType.UpperReverse, DataTypesLib.GameEntryTier.One
+        );
+
+        assertEq(actualLowerFee, expectedLowerFee);
+        assertEq(actualUpperFee, expectedLowerFee * 2);
+        assertEq(actualReverseFee, expectedLowerFee * 2);
+        assertEq(actualUpperReverseFee, expectedLowerFee * 4);
     }
 }

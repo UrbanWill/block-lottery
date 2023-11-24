@@ -10,7 +10,8 @@ library DataTypesLib {
     enum GameType {
         Lower, // Two digits game will default to lower game type
         Upper,
-        Reverse
+        Reverse, // Lower Reverse
+        UpperReverse
     }
 
     enum GameEntryTier {
@@ -29,16 +30,25 @@ library DataTypesLib {
 
     struct RoundStatus {
         GameStatus status;
-        uint8 twoDigitsWinnerNumber;
-        uint16 threeDigitsWinnerNumber;
+        uint8 lowerWinner;
+        uint8 upperWinner;
+        uint16 threeDigitsWinner;
         uint256 clamableAt;
-        mapping(GameEntryTier => StatsPerGameTier) statsPerGameTier;
+        mapping(GameEntryTier => TwoDigitStatsPerTier) twoDigitStatsPerTier;
+        mapping(GameEntryTier => ThreeDigitStatsPerTier) threeDigitStatsPerTier;
     }
 
-    struct StatsPerGameTier {
+    struct TwoDigitStatsPerTier {
         uint8 winnersClaimedCount;
         uint256 tierTicketCount;
-        mapping(uint8 => uint256) ticketCountPerNumber;
+        mapping(uint8 => uint16) ticketCountPerLowerNumber;
+        mapping(uint8 => uint16) ticketCountPerUpperNumber;
+    }
+
+    struct ThreeDigitStatsPerTier {
+        uint8 winnersClaimedCount;
+        uint256 tierTicketCount;
+        mapping(uint16 => uint16) ticketCountPerNumber;
     }
 
     struct FeePerTier {

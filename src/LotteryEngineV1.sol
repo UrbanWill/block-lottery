@@ -40,7 +40,7 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     event RoundCreated(uint16 indexed round, uint256 timestamp);
     event RoundPaused(uint16 indexed round, uint256 timestamp);
     event RoundReultsPosted(uint16 indexed round, uint256 timestamp);
-    event RoundReultsAmended(uint16 indexed round, uint8 twoDigitsWinnerNumber, uint256 timestamp);
+    event RoundReultsAmended(uint16 indexed round, uint8 lowerWinner, uint256 timestamp);
     event TicketBought(
         uint16 indexed round,
         DataTypesLib.GameDigits,
@@ -142,21 +142,21 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
      * @notice Post the results of the round
      * @notice This function is called by a human and therefore subject to human error,
      * this is the reason for the 1 hour delay before the round is claimable, to fix possible human errors
-     * @param twoDigitsWinnerNumber Winning number for the round
+     * @param lowerWinner Winning number for the round
      * @dev This function will eventually be refactored to inlcude the 3 digits game
      */
-    function postRoundResults(uint8 twoDigitsWinnerNumber) public onlyOwner {
+    function postRoundResults(uint8 lowerWinner) public onlyOwner {
         if (s_roundStats[s_roundCounter].status != DataTypesLib.GameStatus.Paused) {
             revert LotteryEngine__RoundMustBePaused();
         }
         s_roundStats[s_roundCounter].status = DataTypesLib.GameStatus.Claimable;
-        s_roundStats[s_roundCounter].twoDigitsWinnerNumber = twoDigitsWinnerNumber;
+        s_roundStats[s_roundCounter].lowerWinner = lowerWinner;
         s_roundStats[s_roundCounter].clamableAt = block.timestamp + CLAIMABLE_DELAY;
 
         emit RoundReultsPosted(s_roundCounter, block.timestamp);
     }
 
-    function amendRoundResults(uint8 twoDigitsWinnerNumber) public onlyOwner {
+    function amendRoundResults(uint8 lowerWinner) public onlyOwner {
         if (s_roundStats[s_roundCounter].status != DataTypesLib.GameStatus.Claimable) {
             revert LotteryEngine__RoundMustBeClaimable();
         }
@@ -164,10 +164,10 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             revert LotteryEngine__RoundResultAmendMustBeWithinTime();
         }
 
-        s_roundStats[s_roundCounter].twoDigitsWinnerNumber = twoDigitsWinnerNumber;
+        s_roundStats[s_roundCounter].lowerWinner = lowerWinner;
         s_roundStats[s_roundCounter].clamableAt = block.timestamp + CLAIMABLE_DELAY;
 
-        emit RoundReultsAmended(s_roundCounter, twoDigitsWinnerNumber, block.timestamp);
+        emit RoundReultsAmended(s_roundCounter, lowerWinner, block.timestamp);
     }
 
     /**
@@ -178,6 +178,7 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /**
      * @notice Buy a two digits ticket for a given round, mints a new ticket NFT
+     * @dev TODO: Refactor this function to be more gas efficient
      * @param round Round number
      * @param tier Tier price of the game
      * @param number Number to bet on
@@ -196,14 +197,44 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             revert LotteryEngine__NumberOutOfRange();
         }
 
-        uint256 gameTokenAmountFee = getGameTokenAmountFee(DataTypesLib.GameDigits.Two, tier);
+        uint256 gameTokenAmountFee = calculateTwoDigitsTicketFee(DataTypesLib.GameDigits.Two, gameType, tier);
         if (msg.value != gameTokenAmountFee) {
             revert LotteryEngine__IncorrectTierFee();
         }
 
-        s_totalTicketsSold++;
-        s_roundStats[round].statsPerGameTier[tier].tierTicketCount++;
-        s_roundStats[round].statsPerGameTier[tier].ticketCountPerNumber[number]++;
+        uint8 ticketSaleCount;
+
+        if (gameType == DataTypesLib.GameType.Reverse || gameType == DataTypesLib.GameType.UpperReverse) {
+            uint8 reversedNumber = reverseTwoDigitUint8(number);
+
+            if (gameType == DataTypesLib.GameType.UpperReverse) {
+                s_roundStats[round].twoDigitStatsPerTier[tier].ticketCountPerUpperNumber[number]++;
+                s_roundStats[round].twoDigitStatsPerTier[tier].ticketCountPerUpperNumber[reversedNumber]++;
+
+                s_roundStats[round].twoDigitStatsPerTier[tier].ticketCountPerLowerNumber[number]++;
+                s_roundStats[round].twoDigitStatsPerTier[tier].ticketCountPerLowerNumber[reversedNumber]++;
+
+                ticketSaleCount = 4;
+            } else if (gameType == DataTypesLib.GameType.Reverse) {
+                s_roundStats[round].twoDigitStatsPerTier[tier].ticketCountPerLowerNumber[number]++;
+                s_roundStats[round].twoDigitStatsPerTier[tier].ticketCountPerLowerNumber[reversedNumber]++;
+
+                ticketSaleCount = 2;
+            }
+        }
+
+        if (gameType == DataTypesLib.GameType.Upper) {
+            s_roundStats[round].twoDigitStatsPerTier[tier].ticketCountPerUpperNumber[number]++;
+
+            ticketSaleCount = 2;
+        } else if (gameType == DataTypesLib.GameType.Lower) {
+            s_roundStats[round].twoDigitStatsPerTier[tier].ticketCountPerLowerNumber[number]++;
+
+            ticketSaleCount = 1;
+        }
+
+        s_totalTicketsSold += ticketSaleCount; // TODO: Remove this line, it is just for testing purposes atm
+        s_roundStats[round].twoDigitStatsPerTier[tier].tierTicketCount += ticketSaleCount;
 
         uint256 tokenId = _mintTicket(round, DataTypesLib.GameDigits.Two, gameType, tier, number, tokenUri);
 
@@ -219,7 +250,7 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /**
      * @param round Round number
-     * @param gameDigit Digits of the game, currently only 2 digits is supported
+     * @param gameDigits Digits of the game, currently only 2 digits is supported
      * @param tier Tier price of the game
      * @param number Number to bet on
      * @param tokenUri URI of the token to be minted
@@ -227,17 +258,18 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     function _mintTicket(
         uint16 round,
-        DataTypesLib.GameDigits gameDigit,
+        DataTypesLib.GameDigits gameDigits,
         DataTypesLib.GameType gameType,
         DataTypesLib.GameEntryTier tier,
         uint8 number,
         string memory tokenUri
     ) internal returns (uint256) {
         uint256 tokenId =
-            TicketV1(s_ticketAddress).safeMint(msg.sender, round, gameDigit, gameType, tier, number, tokenUri);
+            TicketV1(s_ticketAddress).safeMint(msg.sender, round, gameDigits, gameType, tier, number, tokenUri);
 
         return tokenId;
     }
+
     ////////////////////////////////////////
     // Public & External View Functions   //
     ////////////////////////////////////////
@@ -278,20 +310,10 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     function getRoundInfo(uint16 round)
         public
         view
-        returns (
-            DataTypesLib.GameStatus status,
-            uint8 twoDigitsWinnerNumber,
-            uint16 threeDigitsWinnerNumber,
-            uint256 claimableAt
-        )
+        returns (DataTypesLib.GameStatus status, uint8 lowerWinner, uint16 threeDigitsWinner, uint256 claimableAt)
     {
         DataTypesLib.RoundStatus storage roundStats = s_roundStats[round];
-        return (
-            roundStats.status,
-            roundStats.twoDigitsWinnerNumber,
-            roundStats.threeDigitsWinnerNumber,
-            roundStats.clamableAt
-        );
+        return (roundStats.status, roundStats.lowerWinner, roundStats.threeDigitsWinner, roundStats.clamableAt);
     }
 
     /**
@@ -304,41 +326,88 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         view
         returns (uint256)
     {
-        return s_roundStats[round].statsPerGameTier[tier].tierTicketCount;
-    }
-
-    function getTierNumberSoldCountPerRound(uint16 round, DataTypesLib.GameEntryTier tier, uint8 number)
-        public
-        view
-        returns (uint256)
-    {
-        return s_roundStats[round].statsPerGameTier[tier].ticketCountPerNumber[number];
+        return s_roundStats[round].twoDigitStatsPerTier[tier].tierTicketCount;
     }
 
     /**
-     * @param gameDigit Digits of the game, currently only 2 digits is supported
+     * @notice Get the number of tickets sold for a given number in a given tier, round and type
+     * @dev This function will be used to prevent users from aping into a single number
+     * @param round Round number
+     * @param gameType  Game type
+     * @param tier Tier price of the game
+     * @param number Number that was bet on
+     */
+    function getTwoDigitsNumberCountPerType(
+        uint16 round,
+        DataTypesLib.GameType gameType,
+        DataTypesLib.GameEntryTier tier,
+        uint8 number
+    ) public view returns (uint256) {
+        if (gameType == DataTypesLib.GameType.Lower || gameType == DataTypesLib.GameType.Reverse) {
+            return s_roundStats[round].twoDigitStatsPerTier[tier].ticketCountPerLowerNumber[number];
+        }
+        return s_roundStats[round].twoDigitStatsPerTier[tier].ticketCountPerUpperNumber[number];
+    }
+
+    /**
+     * @param gameDigits Digits of the game, currently only 2 digits is supported
      * @param gameEntryTier Tier of the game, maps to the entry fee
      */
-    function getGameFee(DataTypesLib.GameDigits gameDigit, DataTypesLib.GameEntryTier gameEntryTier)
+    function getGameFee(DataTypesLib.GameDigits gameDigits, DataTypesLib.GameEntryTier gameEntryTier)
         public
         view
         returns (uint256)
     {
-        return s_gameEntryFees[gameDigit].feePerTier[gameEntryTier];
+        return s_gameEntryFees[gameDigits].feePerTier[gameEntryTier];
     }
 
     /**
-     * @param gameDigit Digits of the game, currently only 2 digits is supported
+     * @param gameDigits Digits of the game, currently only 2 digits is supported
      * @param gameEntryTier Tier of the game, maps to the entry fee
      * @return Token amount in wei for a given USD Entry tier fee amount
      */
-    function getGameTokenAmountFee(DataTypesLib.GameDigits gameDigit, DataTypesLib.GameEntryTier gameEntryTier)
+    function getGameTokenAmountFee(DataTypesLib.GameDigits gameDigits, DataTypesLib.GameEntryTier gameEntryTier)
         public
         view
         returns (uint256)
     {
-        uint256 fee = getGameFee(gameDigit, gameEntryTier);
+        uint256 fee = getGameFee(gameDigits, gameEntryTier);
         return getTokenAmountFromUsd(fee);
+    }
+
+    /**
+     * @param gameDigits Digit of the game, currently only 2 digits is supported
+     * @param gameType Type of the game
+     * @param tier Game tier price
+     */
+    function calculateTwoDigitsTicketFee(
+        DataTypesLib.GameDigits gameDigits,
+        DataTypesLib.GameType gameType,
+        DataTypesLib.GameEntryTier tier
+    ) public view returns (uint256) {
+        uint256 gameTokenAmountFee = getGameTokenAmountFee(gameDigits, tier);
+
+        if (gameType == DataTypesLib.GameType.Reverse || gameType == DataTypesLib.GameType.Upper) {
+            return gameTokenAmountFee * 2;
+        } else if (gameType == DataTypesLib.GameType.UpperReverse) {
+            return gameTokenAmountFee * 4;
+        }
+        // Handles Lower case
+        return gameTokenAmountFee;
+    }
+    /**
+     * @notice Reverses a two digit number
+     * @dev Two digits uint8 numbers are expected
+     * @param number Two digit Number to reverse
+     */
+
+    function reverseTwoDigitUint8(uint8 number) public pure returns (uint8) {
+        require(number < 100, "Number must be less than 100");
+
+        uint8 tens = number / 10;
+        uint8 ones = number % 10;
+
+        return ones * 10 + tens;
     }
 
     function version() public pure returns (uint8) {
