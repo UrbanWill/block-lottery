@@ -40,6 +40,7 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     event RoundCreated(uint16 indexed round, uint256 timestamp);
     event RoundPaused(uint16 indexed round, uint256 timestamp);
     event RoundReultsPosted(uint16 indexed round, uint256 timestamp);
+    event RoundReultsAmended(uint16 indexed round, uint8 twoDigitsWinnerNumber, uint256 timestamp);
     event TicketBought(
         uint16 indexed round, DataTypesLib.GameEntryTier indexed tier, uint8 indexed number, address player
     );
@@ -55,6 +56,8 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error LotteryEngine__NumberOutOfRange();
     error LotteryEngine__RoundAlreadyPaused();
     error LotteryEngine__RoundMustBePaused();
+    error LotteryEngine__RoundMustBeClaimable();
+    error LotteryEngine__RoundResultAmendMustBeWithinTime();
     ////////////////////////////////////////
     // Modifiers                          //
     ////////////////////////////////////////
@@ -135,18 +138,32 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
      * @notice Post the results of the round
      * @notice This function is called by a human and therefore subject to human error,
      * this is the reason for the 1 hour delay before the round is claimable, to fix possible human errors
-     * @param _twoDigitsWinnerNumber Winning number for the round
+     * @param twoDigitsWinnerNumber Winning number for the round
      * @dev This function will eventually be refactored to inlcude the 3 digits game
      */
-    function postRoundResults(uint8 _twoDigitsWinnerNumber) public onlyOwner {
+    function postRoundResults(uint8 twoDigitsWinnerNumber) public onlyOwner {
         if (s_roundStats[s_roundCounter].status != DataTypesLib.GameStatus.Paused) {
             revert LotteryEngine__RoundMustBePaused();
         }
         s_roundStats[s_roundCounter].status = DataTypesLib.GameStatus.Claimable;
-        s_roundStats[s_roundCounter].twoDigitsWinnerNumber = _twoDigitsWinnerNumber;
+        s_roundStats[s_roundCounter].twoDigitsWinnerNumber = twoDigitsWinnerNumber;
         s_roundStats[s_roundCounter].clamableAt = block.timestamp + CLAIMABLE_DELAY;
 
         emit RoundReultsPosted(s_roundCounter, block.timestamp);
+    }
+
+    function amendRoundResults(uint8 twoDigitsWinnerNumber) public onlyOwner {
+        if (s_roundStats[s_roundCounter].status != DataTypesLib.GameStatus.Claimable) {
+            revert LotteryEngine__RoundMustBeClaimable();
+        }
+        if (s_roundStats[s_roundCounter].clamableAt < block.timestamp) {
+            revert LotteryEngine__RoundResultAmendMustBeWithinTime();
+        }
+
+        s_roundStats[s_roundCounter].twoDigitsWinnerNumber = twoDigitsWinnerNumber;
+        s_roundStats[s_roundCounter].clamableAt = block.timestamp + CLAIMABLE_DELAY;
+
+        emit RoundReultsAmended(s_roundCounter, twoDigitsWinnerNumber, block.timestamp);
     }
 
     /**
