@@ -52,7 +52,6 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error LotteryEngine__CurrentRoundOngoing();
     error LotteryEngine__RoundMustBeOpen();
     error LotteryEngine__IncorrectTierFee();
-    error LotteryEngine__GameDigitNotSupported();
     error LotteryEngine__NumberOutOfRange();
     error LotteryEngine__RoundAlreadyPaused();
     error LotteryEngine__RoundMustBePaused();
@@ -173,33 +172,26 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
      */
 
     /**
-     * @notice Buy a ticket for a given round, mints a new ticket NFT
+     * @notice Buy a two digits ticket for a given round, mints a new ticket NFT
      * @param round Round number
-     * @param gameDigit Digits of the game, currently only 2 digits is supported
      * @param tier Tier price of the game
      * @param number Number to bet on
      * @param tokenUri URI of the token to be minted
+     * @return tokenId of the minted ticket
      */
 
-    function buyTicket(
+    function buyTwoDigitsTicket(
         uint16 round,
-        DataTypesLib.GameDigits gameDigit,
+        DataTypesLib.GameType gameType,
         DataTypesLib.GameEntryTier tier,
         uint8 number,
         string memory tokenUri
     ) public payable roundMustBeOpen(round) returns (uint256) {
-        if (gameDigit != DataTypesLib.GameDigits.Two) {
-            revert LotteryEngine__GameDigitNotSupported();
+        if (number < MIN_NUMBER || number > MAX_TWO_DIGIT_GAME_NUMBER) {
+            revert LotteryEngine__NumberOutOfRange();
         }
 
-        if (gameDigit == DataTypesLib.GameDigits.Two) {
-            if (number < MIN_NUMBER || number > MAX_TWO_DIGIT_GAME_NUMBER) {
-                revert LotteryEngine__NumberOutOfRange();
-            }
-        }
-
-        uint256 gameTokenAmountFee = getGameTokenAmountFee(gameDigit, tier);
-
+        uint256 gameTokenAmountFee = getGameTokenAmountFee(DataTypesLib.GameDigits.Two, tier);
         if (msg.value != gameTokenAmountFee) {
             revert LotteryEngine__IncorrectTierFee();
         }
@@ -208,7 +200,7 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         s_roundStats[round].statsPerGameTier[tier].tierTicketCount++;
         s_roundStats[round].statsPerGameTier[tier].ticketCountPerNumber[number]++;
 
-        uint256 tokenId = _mintTicket(round, gameDigit, tier, number, tokenUri);
+        uint256 tokenId = _mintTicket(round, DataTypesLib.GameDigits.Two, gameType, tier, number, tokenUri);
 
         emit TicketBought(round, tier, number, msg.sender);
 
@@ -231,11 +223,13 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     function _mintTicket(
         uint16 round,
         DataTypesLib.GameDigits gameDigit,
+        DataTypesLib.GameType gameType,
         DataTypesLib.GameEntryTier tier,
         uint8 number,
         string memory tokenUri
     ) internal returns (uint256) {
-        uint256 tokenId = TicketV1(s_ticketAddress).safeMint(msg.sender, round, gameDigit, tier, number, tokenUri);
+        uint256 tokenId =
+            TicketV1(s_ticketAddress).safeMint(msg.sender, round, gameDigit, gameType, tier, number, tokenUri);
 
         return tokenId;
     }

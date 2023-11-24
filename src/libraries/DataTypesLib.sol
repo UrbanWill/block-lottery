@@ -13,6 +13,12 @@ library DataTypesLib {
         Reverse
     }
 
+    enum GameEntryTier {
+        One,
+        Two,
+        Three
+    }
+
     enum GameStatus {
         Closed,
         Paused,
@@ -33,12 +39,6 @@ library DataTypesLib {
         uint8 winnersClaimedCount;
         uint256 tierTicketCount;
         mapping(uint8 => uint256) ticketCountPerNumber;
-    }
-
-    enum GameEntryTier {
-        One,
-        Two,
-        Three
     }
 
     struct FeePerTier {
