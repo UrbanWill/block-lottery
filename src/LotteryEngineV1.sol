@@ -25,7 +25,6 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     uint256 private constant ADDITIONAL_FEED_PRECISION = 1e10;
     uint256 private constant PRECISION = 1e18;
     uint16 s_roundCounter = 0;
-    uint256 public s_totalTicketsSold = 0;
 
     address public s_ticketAddress;
     address private s_priceFeed;
@@ -185,7 +184,6 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
      * @param tokenUri URI of the token to be minted
      * @return tokenId of the minted ticket
      */
-
     function buyTwoDigitsTicket(
         uint16 round,
         DataTypesLib.GameType gameType,
@@ -202,46 +200,22 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             revert LotteryEngine__IncorrectTierFee();
         }
 
-        uint8 ticketSaleCount;
+        // Calculate the ticket count to be incremented.
+        uint8 ticketSaleCount = _getTicketSaleCount(gameType);
 
-        if (gameType == DataTypesLib.GameType.Reverse || gameType == DataTypesLib.GameType.UpperReverse) {
-            uint8 reversedNumber = reverseTwoDigitUint8(number);
+        // Increment the storage values once instead of multiple times.
+        DataTypesLib.TwoDigitStatsPerTier storage tierStats = s_roundStats[round].twoDigitStatsPerTier[tier];
+        tierStats.tierTicketCount += ticketSaleCount;
+        _incrementTicketCount(tierStats, gameType, number);
 
-            if (gameType == DataTypesLib.GameType.UpperReverse) {
-                s_roundStats[round].twoDigitStatsPerTier[tier].ticketCountPerUpperNumber[number]++;
-                s_roundStats[round].twoDigitStatsPerTier[tier].ticketCountPerUpperNumber[reversedNumber]++;
-
-                s_roundStats[round].twoDigitStatsPerTier[tier].ticketCountPerLowerNumber[number]++;
-                s_roundStats[round].twoDigitStatsPerTier[tier].ticketCountPerLowerNumber[reversedNumber]++;
-
-                ticketSaleCount = 4;
-            } else if (gameType == DataTypesLib.GameType.Reverse) {
-                s_roundStats[round].twoDigitStatsPerTier[tier].ticketCountPerLowerNumber[number]++;
-                s_roundStats[round].twoDigitStatsPerTier[tier].ticketCountPerLowerNumber[reversedNumber]++;
-
-                ticketSaleCount = 2;
-            }
-        }
-
-        if (gameType == DataTypesLib.GameType.Upper) {
-            s_roundStats[round].twoDigitStatsPerTier[tier].ticketCountPerUpperNumber[number]++;
-
-            ticketSaleCount = 2;
-        } else if (gameType == DataTypesLib.GameType.Lower) {
-            s_roundStats[round].twoDigitStatsPerTier[tier].ticketCountPerLowerNumber[number]++;
-
-            ticketSaleCount = 1;
-        }
-
-        s_totalTicketsSold += ticketSaleCount; // TODO: Remove this line, it is just for testing purposes atm
-        s_roundStats[round].twoDigitStatsPerTier[tier].tierTicketCount += ticketSaleCount;
-
+        // Mint the ticket.
         uint256 tokenId = _mintTicket(round, DataTypesLib.GameDigits.Two, gameType, tier, number, tokenUri);
 
         emit TicketBought(round, DataTypesLib.GameDigits.Two, gameType, tier, number, msg.sender);
 
         return tokenId;
     }
+
     ////////////////////////////////////////
     // Private & Internal View Functions  //
     ////////////////////////////////////////
@@ -268,6 +242,49 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             TicketV1(s_ticketAddress).safeMint(msg.sender, round, gameDigits, gameType, tier, number, tokenUri);
 
         return tokenId;
+    }
+
+    /**
+     * @param gameType Type of the game
+     * @return Number of tickets to be sold for a given game type
+     */
+    function _getTicketSaleCount(DataTypesLib.GameType gameType) internal pure returns (uint8) {
+        if (gameType == DataTypesLib.GameType.UpperReverse) {
+            return 4;
+        } else if (gameType == DataTypesLib.GameType.Reverse || gameType == DataTypesLib.GameType.Upper) {
+            return 2;
+        }
+        return 1;
+    }
+
+    /**
+     * @notice Increments the ticket count for a given number
+     * @dev Helper function to handle incrementing storage of the ticket count for a given number
+     * @param tierStats Storage struct for the tier stats
+     * @param gameType Type of the game
+     * @param number Number chose by the player to increment count
+     */
+    function _incrementTicketCount(
+        DataTypesLib.TwoDigitStatsPerTier storage tierStats,
+        DataTypesLib.GameType gameType,
+        uint8 number
+    ) internal {
+        uint8 reversedNumber;
+        if (gameType == DataTypesLib.GameType.Reverse || gameType == DataTypesLib.GameType.UpperReverse) {
+            reversedNumber = reverseTwoDigitUint8(number);
+            tierStats.ticketCountPerLowerNumber[reversedNumber]++;
+        }
+
+        if (gameType == DataTypesLib.GameType.Upper || gameType == DataTypesLib.GameType.UpperReverse) {
+            tierStats.ticketCountPerUpperNumber[number]++;
+        }
+
+        if (gameType == DataTypesLib.GameType.UpperReverse) {
+            tierStats.ticketCountPerUpperNumber[reversedNumber]++;
+        }
+
+        // Every game type will increment the lower number count
+        tierStats.ticketCountPerLowerNumber[number]++;
     }
 
     ////////////////////////////////////////
