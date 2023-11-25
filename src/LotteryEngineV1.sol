@@ -190,7 +190,7 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         DataTypesLib.GameEntryTier tier,
         uint8 number,
         string memory tokenUri
-    ) public payable roundMustBeOpen(round) returns (uint256) {
+    ) external payable roundMustBeOpen(round) returns (uint256) {
         if (number < MIN_NUMBER || number > MAX_TWO_DIGIT_GAME_NUMBER) {
             revert LotteryEngine__NumberOutOfRange();
         }
@@ -199,18 +199,11 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         if (msg.value != gameTokenAmountFee) {
             revert LotteryEngine__IncorrectTierFee();
         }
-
-        // Calculate the ticket count to be incremented.
-        uint8 ticketSaleCount = _getTicketSaleCount(gameType);
-
-        // Increment the storage values once instead of multiple times.
-        DataTypesLib.TwoDigitStatsPerTier storage tierStats = s_roundStats[round].twoDigitStatsPerTier[tier];
-        tierStats.tierTicketCount += ticketSaleCount;
-        _incrementTicketCount(tierStats, gameType, number);
+        // Handle storage updates for the ticket count
+        _incrementTicketCount(round, gameType, tier, number);
 
         // Mint the ticket.
         uint256 tokenId = _mintTicket(round, DataTypesLib.GameDigits.Two, gameType, tier, number, tokenUri);
-
         emit TicketBought(round, DataTypesLib.GameDigits.Two, gameType, tier, number, msg.sender);
 
         return tokenId;
@@ -260,15 +253,23 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /**
      * @notice Increments the ticket count for a given number
      * @dev Helper function to handle incrementing storage of the ticket count for a given number
-     * @param tierStats Storage struct for the tier stats
+     * @param round Round number
      * @param gameType Type of the game
+     * @param tier Tier price of the game
      * @param number Number chose by the player to increment count
      */
     function _incrementTicketCount(
-        DataTypesLib.TwoDigitStatsPerTier storage tierStats,
+        uint16 round,
         DataTypesLib.GameType gameType,
+        DataTypesLib.GameEntryTier tier,
         uint8 number
     ) internal {
+        // Calculate the ticket count to be incremented.
+        uint8 ticketSaleCount = _getTicketSaleCount(gameType);
+
+        // Increment the storage values once instead of multiple times.
+        DataTypesLib.TwoDigitStatsPerTier storage tierStats = s_roundStats[round].twoDigitStatsPerTier[tier];
+        tierStats.tierTicketCount += ticketSaleCount;
         uint8 reversedNumber;
         if (gameType == DataTypesLib.GameType.Reverse || gameType == DataTypesLib.GameType.UpperReverse) {
             reversedNumber = reverseTwoDigitUint8(number);
