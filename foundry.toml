@@ -4,5 +4,11 @@ out = "out"
 libs = ["lib"]
 ffi = true
 
+optimizer = true
+# https://docs.soliditylang.org/en/v0.8.21/ir-breaking-changes.html#solidity-ir-based-codegen-changes
+via_ir = true
+
+optimizer_runs = 300
+
 remappings = ['@openzeppelin/contracts-upgradeable=lib/openzeppelin-contracts-upgradeable/contracts','@chainlink/contracts/=lib/chainlink-brownie-contracts/contracts']
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
