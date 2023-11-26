@@ -447,7 +447,66 @@ contract LotteryEngineV1Test is StdCheats, Test {
 
         assertEq(ticketV1.ownerOf(0), USER);
     }
+    ////////////////////////////////////////
+    // claimWinnings Tests                //
+    ////////////////////////////////////////
 
+    modifier buyTwoDigitsTicket() {
+        uint8 number = 33;
+        uint16 round = 1;
+        DataTypesLib.GameEntryTier tier = DataTypesLib.GameEntryTier.One;
+        DataTypesLib.GameType gameType = DataTypesLib.GameType.Lower;
+        uint256 gameFee =
+            lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One);
+
+        vm.prank(USER);
+        lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(
+            round, DataTypesLib.GameType.Lower, DataTypesLib.GameEntryTier.One, uint8(number), PUG_URI
+        );
+
+        _;
+    }
+
+    function testLEV1ClaimWinningsRevertsWhenRoundIsNotClaimable() public createNewRound {
+        uint256 tokenId = 1;
+        vm.expectRevert(LotteryEngineV1.LotteryEngine__RoundMustBeClaimable.selector);
+        lotteryEngineV1.claimWinnings(tokenId);
+    }
+
+    function testLEV1ClaimWinningsRevertsWhenNotTicketOwner() public createNewRound buyTwoDigitsTicket {
+        uint256 tokenId = 0;
+        uint8 lowerWinner = 99;
+        uint8 upperWinner = 98;
+
+        vm.startPrank(LotteryEngineV1(engineProxyAddress).owner());
+        lotteryEngineV1.pauseRound();
+        lotteryEngineV1.postRoundResults(lowerWinner, upperWinner);
+        vm.stopPrank();
+
+        vm.warp(61 minutes);
+        vm.prank(RAMONA);
+        vm.expectRevert(LotteryEngineV1.LotteryEngine__OnlyTicketOwnerCanClaimWinnings.selector);
+        lotteryEngineV1.claimWinnings(tokenId);
+    }
+
+    function testLEV1ClaimWinningsRevertsWhenTicketAlreadyClaimed() public createNewRound buyTwoDigitsTicket {
+        uint256 tokenId = 0;
+        uint8 lowerWinner = 33;
+        uint8 upperWinner = 98;
+
+        vm.startPrank(LotteryEngineV1(engineProxyAddress).owner());
+        lotteryEngineV1.pauseRound();
+        lotteryEngineV1.postRoundResults(lowerWinner, upperWinner);
+        vm.stopPrank();
+
+        vm.warp(61 minutes);
+        vm.startPrank(USER);
+        lotteryEngineV1.claimWinnings(tokenId);
+
+        vm.expectRevert(LotteryEngineV1.LotteryEngine__TicketAlreadyClaimed.selector);
+        lotteryEngineV1.claimWinnings(tokenId);
+        vm.stopPrank();
+    }
     ////////////////////////////////////////
     // Price Tests                        //
     ////////////////////////////////////////

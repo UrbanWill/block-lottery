@@ -217,6 +217,57 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         return tokenId;
     }
 
+    function claimWinnings(uint256 tokenId) external {
+        (
+            bool claimed,
+            uint16 round,
+            DataTypesLib.GameDigits digit,
+            DataTypesLib.GameType gameType,
+            DataTypesLib.GameEntryTier tier,
+            uint8 number
+        ) = TicketV1(s_ticketAddress).tokenInfo(tokenId);
+        DataTypesLib.RoundStatus storage roundStats = s_roundStats[round];
+
+        if (roundStats.status != DataTypesLib.GameStatus.Claimable || roundStats.clamableAt > block.timestamp) {
+            revert LotteryEngine__RoundMustBeClaimable();
+        }
+        if (msg.sender != TicketV1(s_ticketAddress).ownerOf(tokenId)) {
+            revert LotteryEngine__OnlyTicketOwnerCanClaimWinnings();
+        }
+
+        if (claimed) {
+            revert LotteryEngine__TicketAlreadyClaimed();
+        }
+
+        bool isWinner = false;
+
+        if (gameType == DataTypesLib.GameType.Reverse) {
+            if (number == reverseTwoDigitUint8(roundStats.lowerWinner)) {
+                isWinner = true;
+            }
+        } else if (gameType == DataTypesLib.GameType.Upper) {
+            if (number == roundStats.upperWinner) {
+                isWinner = true;
+            }
+        } else if (gameType == DataTypesLib.GameType.UpperReverse) {
+            if (number == reverseTwoDigitUint8(roundStats.upperWinner)) {
+                isWinner = true;
+            }
+        }
+
+        // Every game is a lower game by default
+        if (number == roundStats.lowerWinner) {
+            isWinner = true;
+        }
+
+        if (isWinner) {
+            TicketV1(s_ticketAddress).setTicketClaimed(tokenId);
+        }
+
+        // Update the winnersClaimedCount
+        // DataTypesLib.TwoDigitStatsPerTier storage tierStats = roundStats.twoDigitStatsPerTier[tier];
+    }
+
     ////////////////////////////////////////
     // Private & Internal View Functions  //
     ////////////////////////////////////////
@@ -299,11 +350,11 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     ////////////////////////////////////////
     // Public & External View Functions   //
     ////////////////////////////////////////
+
     /**
      * @param usdAmountInWei USD amount in WEIi
      * @return Token amount in WEI for a given USD amount
      */
-
     function getTokenAmountFromUsd(uint256 usdAmountInWei) public view returns (uint256) {
         AggregatorV3Interface priceFeed = AggregatorV3Interface(s_priceFeed);
         (, int256 price,,,) = priceFeed.staleCheckLatestRoundData();
