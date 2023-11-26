@@ -34,6 +34,10 @@ contract TicketV1 is
         uint8 number;
     }
 
+    ////////////////////////////////////////
+    // Functions                          //
+    ////////////////////////////////////////
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -50,6 +54,10 @@ contract TicketV1 is
         _grantRole(MINTER_ROLE, minter);
         _grantRole(UPGRADER_ROLE, upgrader);
     }
+
+    ////////////////////////////////////////
+    // External Functions                 //
+    ////////////////////////////////////////
 
     function safeMint(
         address to,
@@ -79,9 +87,31 @@ contract TicketV1 is
         return tokenId;
     }
 
-    function version() public pure returns (uint8) {
-        return 1;
+    function setTicketClaimed(uint256 tokenId) public onlyRole(MINTER_ROLE) {
+        tokenInfo[tokenId].claimed = true;
     }
+
+    function tokenURI(uint256 tokenId)
+        public
+        view
+        override(ERC721Upgradeable, ERC721URIStorageUpgradeable)
+        returns (string memory)
+    {
+        return super.tokenURI(tokenId);
+    }
+
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        override(ERC721Upgradeable, ERC721EnumerableUpgradeable, ERC721URIStorageUpgradeable, AccessControlUpgradeable)
+        returns (bool)
+    {
+        return super.supportsInterface(interfaceId);
+    }
+
+    ////////////////////////////////////////
+    // Private & Internal View Functions  //
+    ////////////////////////////////////////
 
     function _setTokenInfo(uint256 tokenId, TokenInfo memory info) internal {
         tokenInfo[tokenId] = info;
@@ -105,22 +135,11 @@ contract TicketV1 is
     {
         super._increaseBalance(account, value);
     }
+    ////////////////////////////////////////
+    // Public & External View Functions   //
+    ////////////////////////////////////////
 
-    function tokenURI(uint256 tokenId)
-        public
-        view
-        override(ERC721Upgradeable, ERC721URIStorageUpgradeable)
-        returns (string memory)
-    {
-        return super.tokenURI(tokenId);
-    }
-
-    function supportsInterface(bytes4 interfaceId)
-        public
-        view
-        override(ERC721Upgradeable, ERC721EnumerableUpgradeable, ERC721URIStorageUpgradeable, AccessControlUpgradeable)
-        returns (bool)
-    {
-        return super.supportsInterface(interfaceId);
+    function version() public pure returns (uint8) {
+        return 1;
     }
 }

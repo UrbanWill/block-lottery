@@ -32,9 +32,9 @@ contract TicketV1Test is StdCheats, Test {
         ticketV1 = TicketV1(ticketProxyAddress);
     }
 
-    ///////////////////////
-    // safeMint Tests    //
-    ///////////////////////
+    ////////////////////////////////////////
+    // safeMint Tests                     //
+    ////////////////////////////////////////
 
     function testTicketV1SafeMintRevertsNotMinterRole() public {
         vm.expectRevert();
@@ -81,5 +81,27 @@ contract TicketV1Test is StdCheats, Test {
 
         assertEq(numberTwo, secondNumber);
         assertEq(ticketIdTwoUri, secondUri);
+    }
+
+    ////////////////////////////////////////
+    // setTicketClaimed Tests             //
+    ////////////////////////////////////////
+
+    function testTicketV1SetTicketClaimedRevertsNotMinterRole() public {
+        vm.prank(engineProxyAddress);
+        uint256 tokenId = ticketV1.safeMint(USER, ROUND, GAME_DIGITS, GAME_TYPE, GAME_ENTRY_TIER, NUMBER, URI);
+
+        vm.expectRevert();
+        ticketV1.setTicketClaimed(tokenId);
+    }
+
+    function testTicketV1SetTicketClaimedWorks() public {
+        vm.prank(engineProxyAddress);
+        uint256 tokenId = ticketV1.safeMint(USER, ROUND, GAME_DIGITS, GAME_TYPE, GAME_ENTRY_TIER, NUMBER, URI);
+
+        vm.prank(engineProxyAddress);
+        ticketV1.setTicketClaimed(tokenId);
+        (bool claimed,,,,,) = ticketV1.tokenInfo(tokenId);
+        assertEq(claimed, true);
     }
 }
