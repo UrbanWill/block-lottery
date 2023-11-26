@@ -17,6 +17,7 @@ contract LotteryEngineV1Test is StdCheats, Test {
     address engineProxyAddress;
     address ticketProxyAddress;
     address USER = makeAddr("user");
+    address RAMONA = makeAddr("ramona");
     string constant PUG_URI = "ipfs://bafybeig37ioir76s7mg5oobetncojcm3c3hxasyd4rvid4jqhy4gkaheg4/?filename=0-PUG.json";
 
     uint256 ethUsdOraclePrice = 2000;
@@ -37,8 +38,12 @@ contract LotteryEngineV1Test is StdCheats, Test {
 
     event RoundCreated(uint16 indexed round, uint256 timestamp);
     event RoundPaused(uint16 indexed round, uint256 timestamp);
-    event RoundReultsPosted(uint16 indexed round, uint256 timestamp);
-    event RoundReultsAmended(uint16 indexed round, uint8 twoDigitsWinnerNumber, uint256 timestamp);
+    event RoundResultsPosted(
+        uint16 indexed round, uint8 indexed lowerWinner, uint8 indexed upperWinner, uint256 timestamp
+    );
+    event RoundResultsAmended(
+        uint16 indexed round, uint8 indexed lowerWinner, uint16 indexed upperWinner, uint256 timestamp
+    );
     event TicketBought(
         uint16 indexed round,
         DataTypesLib.GameDigits,
@@ -86,7 +91,7 @@ contract LotteryEngineV1Test is StdCheats, Test {
 
     function testLEV1RoundIsCreatedWithCorrectStatus() public createNewRound {
         uint256 expectedStatus = uint256(DataTypesLib.GameStatus.Open);
-        (DataTypesLib.GameStatus status,,,) = lotteryEngineV1.getRoundInfo(1);
+        (DataTypesLib.GameStatus status,,,,) = lotteryEngineV1.getRoundInfo(1);
         uint256 roundStatus = uint256(status);
         assertEq(roundStatus, expectedStatus);
     }
@@ -114,14 +119,14 @@ contract LotteryEngineV1Test is StdCheats, Test {
         emit RoundPaused(round, block.timestamp);
         lotteryEngineV1.pauseRound();
 
-        (DataTypesLib.GameStatus status,,,) = lotteryEngineV1.getRoundInfo(1);
+        (DataTypesLib.GameStatus status,,,,) = lotteryEngineV1.getRoundInfo(1);
 
         uint256 roundStatus = uint256(status);
         assertEq(roundStatus, expectedStatus);
     }
 
     ////////////////////////////////////////
-    // postRoundResults Tests             //
+    // postlowerWinner Tests             //
     ////////////////////////////////////////
 
     function testLEV1PostRoundResultsRevertsNotOwner() public createNewRound {
@@ -130,15 +135,21 @@ contract LotteryEngineV1Test is StdCheats, Test {
     }
 
     function testLEV1PostRoundResultsRevertWhenRoundIsNotPaused() public {
-        uint8 twoDigitNumber = 33;
+        uint8 lowerWinner = 99;
+        uint8 upperWinner = 98;
 
         vm.prank(LotteryEngineV1(engineProxyAddress).owner());
         vm.expectRevert(LotteryEngineV1.LotteryEngine__RoundMustBePaused.selector);
-        lotteryEngineV1.postRoundResults(twoDigitNumber);
+        lotteryEngineV1.postRoundResults(lowerWinner, upperWinner);
     }
 
-    function testLEV1PostRoundResultsUpdatesRoundStatusAndEmits(uint8 twoDigitNumber) public createNewRound {
-        twoDigitNumber = uint8(bound(twoDigitNumber, 1, 99));
+    function testLEV1PostRoundResultsUpdatesRoundStatusAndEmits(uint8 lowerWinner, uint8 upperWinner)
+        public
+        createNewRound
+    {
+        lowerWinner = uint8(bound(lowerWinner, 1, 99));
+        upperWinner = uint8(bound(upperWinner, 1, 99));
+
         uint16 round = 1;
         uint256 expectedStatus = uint256(DataTypesLib.GameStatus.Claimable);
         uint256 expectedClaimableAt = block.timestamp + CLAIMABLE_DELAY;
@@ -147,41 +158,50 @@ contract LotteryEngineV1Test is StdCheats, Test {
         lotteryEngineV1.pauseRound();
 
         vm.expectEmit(true, true, false, false, engineProxyAddress);
-        emit RoundReultsPosted(round, block.timestamp);
-        lotteryEngineV1.postRoundResults(twoDigitNumber);
+        emit RoundResultsPosted(round, lowerWinner, upperWinner, block.timestamp);
+        lotteryEngineV1.postRoundResults(lowerWinner, upperWinner);
         vm.stopPrank();
 
-        (DataTypesLib.GameStatus status, uint8 twoDigitsWinnerNumber,, uint256 claimableAt) =
+        (DataTypesLib.GameStatus status, uint8 lowerWinnerResult, uint8 upperWinnerResult,, uint256 claimableAt) =
             lotteryEngineV1.getRoundInfo(round);
         uint256 roundStatus = uint256(status);
 
         assertEq(roundStatus, expectedStatus);
-        assertEq(twoDigitsWinnerNumber, twoDigitNumber);
+        assertEq(lowerWinnerResult, lowerWinner);
+        assertEq(upperWinnerResult, upperWinner);
         assertEq(claimableAt, expectedClaimableAt);
     }
 
-    function testLEV1PostRoundResultsUpdatesCorrectRound(uint8 twoDigitWinnerNumber) public createNewRound {
-        twoDigitWinnerNumber = uint8(bound(twoDigitWinnerNumber, 1, 99));
+    function testLEV1PostRoundResultsUpdatesCorrectRound(uint8 lowerWinner, uint8 upperWinner) public createNewRound {
+        lowerWinner = uint8(bound(lowerWinner, 1, 99));
+        upperWinner = uint8(bound(upperWinner, 1, 99));
         uint256 expectedStatus = uint256(DataTypesLib.GameStatus.Claimable);
 
         // Creates and closes a phony round 1, a bit repetitive but it's the only way to test this.
         // Consider refactoring this in the future in favour of invariant testing.
-        uint8 roundOneWinner = 22;
+        uint8 roundOneLowerWinner = 22;
+        uint8 roundOneUpperWinner = 23;
 
         uint256 expectedRoundOneClaimableAt = block.timestamp + CLAIMABLE_DELAY;
 
         vm.startPrank(LotteryEngineV1(engineProxyAddress).owner());
         lotteryEngineV1.pauseRound();
-        lotteryEngineV1.postRoundResults(roundOneWinner);
+        lotteryEngineV1.postRoundResults(roundOneLowerWinner, roundOneUpperWinner);
         vm.stopPrank();
 
         // Round one assertions:
-        (DataTypesLib.GameStatus statusRoundOne, uint8 twoDigitsWinnerNumberRoundOne,, uint256 claimableAtRoundOne) =
-            lotteryEngineV1.getRoundInfo(1);
+        (
+            DataTypesLib.GameStatus statusRoundOne,
+            uint8 lowerWinnerResultRoundOne,
+            uint8 upperWinnerResultRoundOne,
+            ,
+            uint256 claimableAtRoundOne
+        ) = lotteryEngineV1.getRoundInfo(1);
         uint256 roundOneStatus = uint256(statusRoundOne);
 
         assertEq(roundOneStatus, expectedStatus);
-        assertEq(twoDigitsWinnerNumberRoundOne, roundOneWinner);
+        assertEq(lowerWinnerResultRoundOne, roundOneLowerWinner);
+        assertEq(upperWinnerResultRoundOne, roundOneUpperWinner);
         assertEq(claimableAtRoundOne, expectedRoundOneClaimableAt);
 
         // Creates and closes round 2
@@ -193,16 +213,17 @@ contract LotteryEngineV1Test is StdCheats, Test {
         lotteryEngineV1.createRound();
         lotteryEngineV1.pauseRound();
 
-        lotteryEngineV1.postRoundResults(twoDigitWinnerNumber);
+        lotteryEngineV1.postRoundResults(lowerWinner, upperWinner);
         vm.stopPrank();
 
         // Round two assertions:
-        (DataTypesLib.GameStatus status, uint8 twoDigitsWinnerNumber,, uint256 claimableAt) =
+        (DataTypesLib.GameStatus status, uint8 lowerWinnerResult, uint8 upperWinnerResult,, uint256 claimableAt) =
             lotteryEngineV1.getRoundInfo(roundTwo);
         uint256 roundStatus = uint256(status);
 
         assertEq(roundStatus, expectedStatus);
-        assertEq(twoDigitsWinnerNumber, twoDigitWinnerNumber);
+        assertEq(lowerWinnerResult, lowerWinner);
+        assertEq(upperWinnerResult, upperWinner);
         assertEq(claimableAt, expectedClaimableAt);
     }
 
@@ -211,36 +232,45 @@ contract LotteryEngineV1Test is StdCheats, Test {
     ////////////////////////////////////////
 
     function testLEV1AmendRoundResultsRevertsNotOwner() public createNewRound {
-        uint8 amendedTwoDigitNumber = 33;
+        uint8 amendedLowerWinner = 33;
+        uint8 amendedUpperWinner = 32;
 
         vm.expectRevert();
-        lotteryEngineV1.amendRoundResults(amendedTwoDigitNumber);
+        lotteryEngineV1.amendRoundResults(amendedLowerWinner, amendedUpperWinner);
     }
 
     function testLEV1AmendRoundResultsRevertsWhenRoundIsNotClaimable() public createNewRound {
-        uint8 amendedTwoDigitNumber = 33;
+        uint8 amendedLowerWinner = 33;
+        uint8 amendedUpperWinner = 32;
 
         vm.prank(LotteryEngineV1(engineProxyAddress).owner());
         vm.expectRevert(LotteryEngineV1.LotteryEngine__RoundMustBeClaimable.selector);
-        lotteryEngineV1.amendRoundResults(amendedTwoDigitNumber);
+        lotteryEngineV1.amendRoundResults(amendedLowerWinner, amendedUpperWinner);
     }
 
     function testLEV1AmendResultsRevertWhenNotOnTime() public createNewRound {
-        uint8 twoDigitNumber = 99;
-        uint8 amendedTwoDigitNumber = 33;
+        uint8 lowerWinner = 99;
+        uint8 upperWinner = 98;
+        uint8 amendedLowerWinner = 33;
+        uint8 amendedUpperWinner = 32;
 
         vm.startPrank(LotteryEngineV1(engineProxyAddress).owner());
         lotteryEngineV1.pauseRound();
-        lotteryEngineV1.postRoundResults(twoDigitNumber);
+        lotteryEngineV1.postRoundResults(lowerWinner, upperWinner);
+
         vm.warp(61 minutes);
         vm.expectRevert(LotteryEngineV1.LotteryEngine__RoundResultAmendMustBeWithinTime.selector);
-        lotteryEngineV1.amendRoundResults(amendedTwoDigitNumber);
+        lotteryEngineV1.amendRoundResults(amendedLowerWinner, amendedUpperWinner);
         vm.stopPrank();
     }
 
     function testLEV1AmendResultsUpdatesStorageAndEmits() public createNewRound {
-        uint8 twoDigitNumber = 99;
-        uint8 amendedTwoDigitNumber = 33;
+        // uint8 twoDigitNumber = 99;
+        // uint8 amendedTwoDigitNumber = 33;
+        uint8 lowerWinner = 99;
+        uint8 upperWinner = 98;
+        uint8 amendedLowerWinner = 33;
+        uint8 amendedUpperWinner = 32;
         uint16 round = 1;
         uint256 warpTime = 59 minutes;
 
@@ -249,19 +279,20 @@ contract LotteryEngineV1Test is StdCheats, Test {
 
         vm.startPrank(LotteryEngineV1(engineProxyAddress).owner());
         lotteryEngineV1.pauseRound();
-        lotteryEngineV1.postRoundResults(twoDigitNumber);
+        lotteryEngineV1.postRoundResults(lowerWinner, upperWinner);
         vm.warp(59 minutes);
         vm.expectEmit(true, true, false, false, engineProxyAddress);
-        emit RoundReultsAmended(round, amendedTwoDigitNumber, block.timestamp);
-        lotteryEngineV1.amendRoundResults(amendedTwoDigitNumber);
+        emit RoundResultsAmended(round, amendedLowerWinner, amendedUpperWinner, block.timestamp);
+        lotteryEngineV1.amendRoundResults(amendedLowerWinner, amendedUpperWinner);
         vm.stopPrank();
 
-        (DataTypesLib.GameStatus status, uint8 twoDigitsWinnerNumber,, uint256 claimableAt) =
+        (DataTypesLib.GameStatus status, uint8 lowerWinerResult, uint8 upperWinnerResult,, uint256 claimableAt) =
             lotteryEngineV1.getRoundInfo(round);
         uint256 roundStatus = uint256(status);
 
         assertEq(roundStatus, expectedStatus);
-        assertEq(twoDigitsWinnerNumber, amendedTwoDigitNumber);
+        assertEq(lowerWinerResult, amendedLowerWinner);
+        assertEq(upperWinnerResult, amendedUpperWinner);
         assertEq(claimableAt, expectedClaimableAt);
     }
 
@@ -416,9 +447,10 @@ contract LotteryEngineV1Test is StdCheats, Test {
 
         assertEq(ticketV1.ownerOf(0), USER);
     }
-    // ////////////////////////////////////////
-    // // Price Tests                        //
-    // ////////////////////////////////////////
+
+    ////////////////////////////////////////
+    // Price Tests                        //
+    ////////////////////////////////////////
 
     function testLEV1GetTokenAmountFromUsd(uint256 usdAmountInWei) public {
         vm.assume(usdAmountInWei < 1000 ether);

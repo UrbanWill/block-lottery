@@ -38,8 +38,12 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     event RoundCreated(uint16 indexed round, uint256 timestamp);
     event RoundPaused(uint16 indexed round, uint256 timestamp);
-    event RoundReultsPosted(uint16 indexed round, uint256 timestamp);
-    event RoundReultsAmended(uint16 indexed round, uint8 lowerWinner, uint256 timestamp);
+    event RoundResultsPosted(
+        uint16 indexed round, uint8 indexed lowerWinner, uint8 indexed upperWinner, uint256 timestamp
+    );
+    event RoundResultsAmended(
+        uint16 indexed round, uint8 indexed lowerWinner, uint16 indexed upperWinner, uint256 timestamp
+    );
     event TicketBought(
         uint16 indexed round,
         DataTypesLib.GameDigits,
@@ -61,6 +65,8 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error LotteryEngine__RoundMustBePaused();
     error LotteryEngine__RoundMustBeClaimable();
     error LotteryEngine__RoundResultAmendMustBeWithinTime();
+    error LotteryEngine__OnlyTicketOwnerCanClaimWinnings();
+    error LotteryEngine__TicketAlreadyClaimed();
     ////////////////////////////////////////
     // Modifiers                          //
     ////////////////////////////////////////
@@ -141,21 +147,22 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
      * @notice Post the results of the round
      * @notice This function is called by a human and therefore subject to human error,
      * this is the reason for the 1 hour delay before the round is claimable, to fix possible human errors
-     * @param lowerWinner Winning number for the round
+     * @param lowerWinner Winning lower number for the round
      * @dev This function will eventually be refactored to inlcude the 3 digits game
      */
-    function postRoundResults(uint8 lowerWinner) public onlyOwner {
+    function postRoundResults(uint8 lowerWinner, uint8 upperWinner) public onlyOwner {
         if (s_roundStats[s_roundCounter].status != DataTypesLib.GameStatus.Paused) {
             revert LotteryEngine__RoundMustBePaused();
         }
         s_roundStats[s_roundCounter].status = DataTypesLib.GameStatus.Claimable;
         s_roundStats[s_roundCounter].lowerWinner = lowerWinner;
+        s_roundStats[s_roundCounter].upperWinner = upperWinner;
         s_roundStats[s_roundCounter].clamableAt = block.timestamp + CLAIMABLE_DELAY;
 
-        emit RoundReultsPosted(s_roundCounter, block.timestamp);
+        emit RoundResultsPosted(s_roundCounter, lowerWinner, upperWinner, block.timestamp);
     }
 
-    function amendRoundResults(uint8 lowerWinner) public onlyOwner {
+    function amendRoundResults(uint8 lowerWinner, uint8 upperWinner) public onlyOwner {
         if (s_roundStats[s_roundCounter].status != DataTypesLib.GameStatus.Claimable) {
             revert LotteryEngine__RoundMustBeClaimable();
         }
@@ -164,14 +171,14 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
 
         s_roundStats[s_roundCounter].lowerWinner = lowerWinner;
+        s_roundStats[s_roundCounter].upperWinner = upperWinner;
         s_roundStats[s_roundCounter].clamableAt = block.timestamp + CLAIMABLE_DELAY;
 
-        emit RoundReultsAmended(s_roundCounter, lowerWinner, block.timestamp);
+        emit RoundResultsAmended(s_roundCounter, lowerWinner, upperWinner, block.timestamp);
     }
 
     /**
      * TODO:
-     * Amend results
      * Add claim winnings
      */
 
@@ -179,13 +186,14 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
      * @notice Buy a two digits ticket for a given round, mints a new ticket NFT
      * @dev TODO: Refactor this function to be more gas efficient
      * @param round Round number
+     * @param gameType Type of the game
      * @param tier Tier price of the game
      * @param number Number to bet on
      * @param tokenUri URI of the token to be minted
      * @return tokenId of the minted ticket
      */
     function buyTwoDigitsTicket(
-        uint16 round,
+        uint16 round, // This can be removed, the data is s_roundCounter
         DataTypesLib.GameType gameType,
         DataTypesLib.GameEntryTier tier,
         uint8 number,
@@ -328,10 +336,22 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     function getRoundInfo(uint16 round)
         public
         view
-        returns (DataTypesLib.GameStatus status, uint8 lowerWinner, uint16 threeDigitsWinner, uint256 claimableAt)
+        returns (
+            DataTypesLib.GameStatus status,
+            uint8 lowerWinner,
+            uint8 upperWinner,
+            uint16 threeDigitsWinner,
+            uint256 claimableAt
+        )
     {
         DataTypesLib.RoundStatus storage roundStats = s_roundStats[round];
-        return (roundStats.status, roundStats.lowerWinner, roundStats.threeDigitsWinner, roundStats.clamableAt);
+        return (
+            roundStats.status,
+            roundStats.lowerWinner,
+            roundStats.upperWinner,
+            roundStats.threeDigitsWinner,
+            roundStats.clamableAt
+        );
     }
 
     /**
