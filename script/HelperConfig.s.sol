@@ -47,7 +47,7 @@ contract HelperConfig is Script {
         if (activeNetworkConfig.deployerKey != 0) {
             return activeNetworkConfig;
         }
-        vm.startBroadcast(DEFAULT_ANVIL_PRIVATE_KEY);
+        vm.startBroadcast();
         MockV3Aggregator ethUsdPriceFeed = new MockV3Aggregator(
             DECIMALS,
             ETH_USD_PRICE
