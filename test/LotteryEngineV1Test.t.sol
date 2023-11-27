@@ -8,8 +8,9 @@ import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.s
 import {LotteryEngineV1} from "../src/LotteryEngineV1.sol";
 import {TicketV1} from "../src/TicketV1.sol";
 import {DataTypesLib} from "../src/libraries/DataTypesLib.sol";
+import {GasHelpers} from "./helpers/GasHelpers.sol";
 
-contract LotteryEngineV1Test is StdCheats, Test {
+contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
     DeployLotteryEngine public deployLotteryEngine;
     LotteryEngineV1 public lotteryEngineV1;
     TicketV1 public ticketV1;
@@ -441,9 +442,10 @@ contract LotteryEngineV1Test is StdCheats, Test {
         DataTypesLib.GameType gameType = DataTypesLib.GameType(_gameType);
         DataTypesLib.GameEntryTier tier = DataTypesLib.GameEntryTier(_tier);
         uint256 gameFee = lotteryEngineV1.calculateTwoDigitsTicketFee(DataTypesLib.GameDigits.Two, gameType, tier);
-
+        startMeasuringGas("buyTicket gas:");
         vm.prank(USER);
         lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(round, gameType, tier, uint8(number), PUG_URI);
+        stopMeasuringGas();
 
         assertEq(ticketV1.ownerOf(0), USER);
     }
