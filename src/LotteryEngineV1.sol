@@ -45,6 +45,7 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     event RoundResultsAmended(
         uint16 indexed round, uint8 indexed lowerWinner, uint16 indexed upperWinner, uint256 timestamp
     );
+    event RoundClosed(uint16 indexed round, uint16 winners, uint16 claimed, uint256 timestamp);
     event TicketBought(
         uint16 indexed round,
         DataTypesLib.GameDigits digits,
@@ -172,12 +173,10 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         s_roundStats[s_roundCounter].clamableAt = block.timestamp + CLAIMABLE_DELAY;
 
         emit RoundResultsPosted(s_roundCounter, lowerWinner, upperWinner, block.timestamp);
+        _closeRound(s_roundCounter);
     }
 
     function amendRoundResults(uint8 lowerWinner, uint8 upperWinner) public onlyOwner {
-        if (s_roundStats[s_roundCounter].status != DataTypesLib.GameStatus.Claimable) {
-            revert LotteryEngine__RoundMustBeClaimable();
-        }
         if (s_roundStats[s_roundCounter].clamableAt < block.timestamp) {
             revert LotteryEngine__RoundResultAmendMustBeWithinTime();
         }
@@ -187,6 +186,12 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         s_roundStats[s_roundCounter].clamableAt = block.timestamp + CLAIMABLE_DELAY;
 
         emit RoundResultsAmended(s_roundCounter, lowerWinner, upperWinner, block.timestamp);
+
+        uint256 roundWinnersCount = getTotalWinnersPerRound(s_roundCounter);
+
+        if (roundWinnersCount > 0) {
+            s_roundStats[s_roundCounter].status = DataTypesLib.GameStatus.Claimable;
+        }
     }
 
     /**
@@ -262,15 +267,16 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
                 isWinner = true;
             }
         }
-
         // Every game is a lower game by default
         if (number == roundStats.lowerWinner) {
             isWinner = true;
         }
 
         if (isWinner) {
-            TicketV1(s_ticketAddress).setTicketClaimed(tokenId);
             roundStats.twoDigitStatsPerTier[tier].winnersClaimedCount++;
+            _closeRound(round);
+
+            TicketV1(s_ticketAddress).setTicketClaimed(tokenId);
             uint256 winnings = getGameTokenAmountFee(digits, tier) * s_paymentFactor;
             payable(msg.sender).transfer(winnings);
 
@@ -360,6 +366,22 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         tierStats.ticketCountPerLowerNumber[number]++;
     }
 
+    /**
+     * @notice Closes a round. A round will be closed when all winners have claimed their winnings
+     * or N days have passed since the round was claimable.
+     * @param round Round number
+     */
+    function _closeRound(uint16 round) internal {
+        uint16 roundWinnersCount = getTotalWinnersPerRound(round);
+        uint16 roundWinnersClaimedCount = getTotalWinnersClaimedPerRound(round);
+
+        if (roundWinnersCount == roundWinnersClaimedCount) {
+            s_roundStats[round].status = DataTypesLib.GameStatus.Closed;
+
+            emit RoundClosed(round, roundWinnersCount, roundWinnersCount, block.timestamp);
+        }
+    }
+
     ////////////////////////////////////////
     // Public & External View Functions   //
     ////////////////////////////////////////
@@ -432,12 +454,46 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     /**
+     * @notice Only used for two digits games
      * @param round Round number
      * @param tier Tier price of the game
      * @return Number of winners that have claimed their winnings for a given tier in that round
      */
     function getTierWinnersClaimedPerRound(uint16 round, DataTypesLib.GameEntryTier tier) public view returns (uint8) {
         return s_roundStats[round].twoDigitStatsPerTier[tier].winnersClaimedCount;
+    }
+
+    /**
+     * @notice Only used for two digits games
+     * @param round Round number
+     * @return Total number of winners that have claimed their winnings in that round
+     */
+    function getTotalWinnersClaimedPerRound(uint16 round) public view returns (uint8) {
+        return s_roundStats[round].twoDigitStatsPerTier[DataTypesLib.GameEntryTier.One].winnersClaimedCount
+            + s_roundStats[round].twoDigitStatsPerTier[DataTypesLib.GameEntryTier.Two].winnersClaimedCount
+            + s_roundStats[round].twoDigitStatsPerTier[DataTypesLib.GameEntryTier.Three].winnersClaimedCount;
+    }
+
+    /**
+     * @notice Only used for two digits games
+     * @param round Round number
+     * @return Total winners for a given round
+     */
+    function getTotalWinnersPerRound(uint16 round) public view returns (uint16) {
+        uint8 lowerWinner = s_roundStats[round].lowerWinner;
+        uint8 upperWinner = s_roundStats[round].upperWinner;
+
+        uint16 lowerWinnerCount = s_roundStats[round].twoDigitStatsPerTier[DataTypesLib.GameEntryTier.One]
+            .ticketCountPerLowerNumber[lowerWinner]
+            + s_roundStats[round].twoDigitStatsPerTier[DataTypesLib.GameEntryTier.Two].ticketCountPerLowerNumber[lowerWinner]
+            + s_roundStats[round].twoDigitStatsPerTier[DataTypesLib.GameEntryTier.Three].ticketCountPerLowerNumber[lowerWinner];
+
+        uint16 upperWinnerCount = s_roundStats[round].twoDigitStatsPerTier[DataTypesLib.GameEntryTier.One]
+            .ticketCountPerUpperNumber[upperWinner]
+            + s_roundStats[round].twoDigitStatsPerTier[DataTypesLib.GameEntryTier.Two].ticketCountPerUpperNumber[upperWinner]
+            + s_roundStats[round].twoDigitStatsPerTier[DataTypesLib.GameEntryTier.Three].ticketCountPerUpperNumber[upperWinner];
+
+        return lowerWinnerCount + upperWinnerCount;
     }
 
     /**
@@ -508,7 +564,7 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
     /**
      * @notice Reverses a two digit number
-     * @dev Two digits uint8 numbers are expected
+     * @dev Two digits uint8 numbers are expected. This will move moved off chain on a future version
      * @param number Two digit Number to reverse
      */
 
