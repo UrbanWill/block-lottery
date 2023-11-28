@@ -20,11 +20,12 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     ////////////////////////////////////////
 
     uint16 private constant CLAIMABLE_DELAY = 1 hours;
+    uint16 s_roundCounter = 0;
     uint8 private constant MIN_NUMBER = 1;
     uint8 private constant MAX_TWO_DIGIT_GAME_NUMBER = 99;
+    uint256 public constant s_paymentFactor = 25;
     uint256 private constant ADDITIONAL_FEED_PRECISION = 1e10;
     uint256 private constant PRECISION = 1e18;
-    uint16 s_roundCounter = 0;
 
     address public s_ticketAddress;
     address private s_priceFeed;
@@ -46,10 +47,21 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     );
     event TicketBought(
         uint16 indexed round,
-        DataTypesLib.GameDigits,
-        DataTypesLib.GameType indexed,
+        DataTypesLib.GameDigits digits,
+        DataTypesLib.GameType indexed gameType,
         DataTypesLib.GameEntryTier indexed tier,
         uint8 number,
+        address player
+    );
+
+    event TicketClaimed(
+        uint16 indexed round,
+        DataTypesLib.GameDigits digits,
+        DataTypesLib.GameType indexed gameType,
+        DataTypesLib.GameEntryTier indexed tier,
+        uint8 number,
+        uint256 tokenId,
+        uint256 winnings,
         address player
     );
 
@@ -178,11 +190,6 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     /**
-     * TODO:
-     * Add claim winnings
-     */
-
-    /**
      * @notice Buy a two digits ticket for a given round, mints a new ticket NFT
      * @dev TODO: Refactor this function to be more gas efficient
      * @param round Round number
@@ -221,7 +228,7 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         (
             bool claimed,
             uint16 round,
-            DataTypesLib.GameDigits digit,
+            DataTypesLib.GameDigits digits,
             DataTypesLib.GameType gameType,
             DataTypesLib.GameEntryTier tier,
             uint8 number
@@ -239,6 +246,7 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             revert LotteryEngine__TicketAlreadyClaimed();
         }
 
+        // TODO: Move is winner check to its own function
         bool isWinner = false;
 
         if (gameType == DataTypesLib.GameType.Reverse) {
@@ -262,9 +270,14 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
         if (isWinner) {
             TicketV1(s_ticketAddress).setTicketClaimed(tokenId);
+            roundStats.twoDigitStatsPerTier[tier].winnersClaimedCount++;
+            uint256 winnings = getGameTokenAmountFee(digits, tier) * s_paymentFactor;
+            payable(msg.sender).transfer(winnings);
+
+            emit TicketClaimed(round, digits, gameType, tier, number, tokenId, winnings, msg.sender);
         }
 
-        // Update the winnersClaimedCount
+        // TODO: Update the winnersClaimedCount and close round if all winners have claimed
         // DataTypesLib.TwoDigitStatsPerTier storage tierStats = roundStats.twoDigitStatsPerTier[tier];
     }
 
@@ -416,6 +429,15 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         returns (uint256)
     {
         return s_roundStats[round].twoDigitStatsPerTier[tier].tierTicketCount;
+    }
+
+    /**
+     * @param round Round number
+     * @param tier Tier price of the game
+     * @return Number of winners that have claimed their winnings for a given tier in that round
+     */
+    function getTierWinnersClaimedPerRound(uint16 round, DataTypesLib.GameEntryTier tier) public view returns (uint8) {
+        return s_roundStats[round].twoDigitStatsPerTier[tier].winnersClaimedCount;
     }
 
     /**
