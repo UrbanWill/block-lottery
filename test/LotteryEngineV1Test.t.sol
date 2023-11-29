@@ -1144,6 +1144,80 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
         assertEq(lotteryEngineV1.getTotalUnclaimedWinningsPerRound(round), expectedTotalUnclaimed);
     }
 
+    function testLEV1GetTotalUnclaimedWinnings() public createNewRound {
+        uint16 round = 1;
+        uint8 number = 33;
+        uint256 unclaimedTierOneTickets = 2;
+        uint256 unclaimedTierTwoTickets = 1;
+        uint256 unclaimedTierThreeTickets = 3;
+        DataTypesLib.GameType gameType = DataTypesLib.GameType.Lower;
+        uint8 lowerWinner = 33;
+        uint8 upperWinner = 98;
+
+        uint256 tierOneGameFee =
+            lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One);
+        uint256 tierTwoGameFee =
+            lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Two);
+        uint256 tierThreeGameFee =
+            lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Three);
+
+        uint256 expectedUnclaimedTierOne = tierOneGameFee * unclaimedTierOneTickets * lotteryEngineV1.s_paymentFactor();
+        uint256 expectedUnclaimedTierTwo = tierTwoGameFee * unclaimedTierTwoTickets * lotteryEngineV1.s_paymentFactor();
+        uint256 expectedUnclaimedTierThree =
+            tierThreeGameFee * unclaimedTierThreeTickets * lotteryEngineV1.s_paymentFactor();
+
+        uint256 totalUnclaimedRoundOne =
+            expectedUnclaimedTierOne + expectedUnclaimedTierTwo + expectedUnclaimedTierThree;
+
+        vm.startPrank(USER);
+        // Buys 2 tier One tickets
+        lotteryEngineV1.buyTwoDigitsTicket{value: tierOneGameFee}(
+            round, gameType, DataTypesLib.GameEntryTier.One, number, PUG_URI
+        );
+        lotteryEngineV1.buyTwoDigitsTicket{value: tierOneGameFee}(
+            round, gameType, DataTypesLib.GameEntryTier.One, number, PUG_URI
+        );
+        // Buys 1 tier Two ticket
+        lotteryEngineV1.buyTwoDigitsTicket{value: tierTwoGameFee}(
+            round, gameType, DataTypesLib.GameEntryTier.Two, number, PUG_URI
+        );
+        // Buyst 3 tier Three tickets
+        lotteryEngineV1.buyTwoDigitsTicket{value: tierThreeGameFee}(
+            round, gameType, DataTypesLib.GameEntryTier.Three, number, PUG_URI
+        );
+        lotteryEngineV1.buyTwoDigitsTicket{value: tierThreeGameFee}(
+            round, gameType, DataTypesLib.GameEntryTier.Three, number, PUG_URI
+        );
+        lotteryEngineV1.buyTwoDigitsTicket{value: tierThreeGameFee}(
+            round, gameType, DataTypesLib.GameEntryTier.Three, number, PUG_URI
+        );
+        vm.stopPrank();
+
+        vm.startPrank(LotteryEngineV1(engineProxyAddress).owner());
+        lotteryEngineV1.pauseRound();
+        lotteryEngineV1.postRoundResults(lowerWinner, upperWinner);
+        lotteryEngineV1.createRound();
+        vm.stopPrank();
+
+        uint16 roundTwo = 2;
+        uint256 unclaimedTierOneTicketsRoundTwo = 1;
+        uint256 expectedUnclaimedTierOneRoundTwo =
+            tierOneGameFee * unclaimedTierOneTicketsRoundTwo * lotteryEngineV1.s_paymentFactor();
+        uint256 expectedTotalUnclaimed = totalUnclaimedRoundOne + expectedUnclaimedTierOneRoundTwo;
+
+        vm.prank(USER);
+        lotteryEngineV1.buyTwoDigitsTicket{value: tierOneGameFee}(
+            roundTwo, gameType, DataTypesLib.GameEntryTier.One, number, PUG_URI
+        );
+
+        vm.startPrank(LotteryEngineV1(engineProxyAddress).owner());
+        lotteryEngineV1.pauseRound();
+        lotteryEngineV1.postRoundResults(lowerWinner, upperWinner);
+        vm.stopPrank();
+
+        assertEq(lotteryEngineV1.getTotalUnclaimedWinnings(), expectedTotalUnclaimed);
+    }
+
     function testLEV1GetGameFee() public {
         assertEq(
             LotteryEngineV1(engineProxyAddress).getGameFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One),

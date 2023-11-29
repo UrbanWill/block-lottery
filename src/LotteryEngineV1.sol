@@ -80,6 +80,7 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error LotteryEngine__RoundResultAmendMustBeWithinTime();
     error LotteryEngine__OnlyTicketOwnerCanClaimWinnings();
     error LotteryEngine__TicketAlreadyClaimed();
+
     ////////////////////////////////////////
     // Modifiers                          //
     ////////////////////////////////////////
@@ -503,13 +504,12 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
         return unclaimedWinnersCount * getGameTokenAmountFee(DataTypesLib.GameDigits.Two, tier) * s_paymentFactor;
     }
-    // TODO: Continue from here
+
     /**
      * @notice Only used for two digits games
      * @param round Round number
      * @return Total unlcaimed winnings value for a given round
      */
-
     function getTotalUnclaimedWinningsPerRound(uint16 round) public view returns (uint256) {
         uint256 tierOneUnclaimedWinnings = getUnclaimedWinningsPerTierAndRound(round, DataTypesLib.GameEntryTier.One);
         uint256 tierTwoUnclaimedWinnings = getUnclaimedWinningsPerTierAndRound(round, DataTypesLib.GameEntryTier.Two);
@@ -517,6 +517,19 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             getUnclaimedWinningsPerTierAndRound(round, DataTypesLib.GameEntryTier.Three);
 
         return tierOneUnclaimedWinnings + tierTwoUnclaimedWinnings + tierThreeUnclaimedWinnings;
+    }
+
+    /**
+     * @return Total unlcaimed winnings value for all rounds
+     */
+    function getTotalUnclaimedWinnings() public view returns (uint256) {
+        uint256 totalUnclaimedWinnings = 0;
+        for (uint16 i = 1; i <= s_roundCounter; i++) {
+            if (s_roundStats[i].status == DataTypesLib.GameStatus.Claimable) {
+                totalUnclaimedWinnings += getTotalUnclaimedWinningsPerRound(i);
+            }
+        }
+        return totalUnclaimedWinnings;
     }
 
     /**
@@ -614,12 +627,12 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         // Handles Lower case
         return gameTokenAmountFee;
     }
+
     /**
      * @notice Reverses a two digit number
      * @dev Two digits uint8 numbers are expected. This will move moved off chain on a future version
      * @param number Two digit Number to reverse
      */
-
     function reverseTwoDigitUint8(uint8 number) public pure returns (uint8) {
         if (number < MIN_NUMBER || number > MAX_TWO_DIGIT_GAME_NUMBER) {
             revert LotteryEngine__NumberOutOfRange();
