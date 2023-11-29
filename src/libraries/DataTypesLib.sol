@@ -39,14 +39,14 @@ library DataTypesLib {
     }
 
     struct TwoDigitStatsPerTier {
-        uint8 winnersClaimedCount;
+        uint16 winnersClaimedCount;
         uint256 tierTicketCount;
         mapping(uint8 => uint16) ticketCountPerLowerNumber;
         mapping(uint8 => uint16) ticketCountPerUpperNumber;
     }
 
     struct ThreeDigitStatsPerTier {
-        uint8 winnersClaimedCount;
+        uint16 winnersClaimedCount;
         uint256 tierTicketCount;
         mapping(uint16 => uint16) ticketCountPerNumber;
     }

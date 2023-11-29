@@ -84,7 +84,7 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     // Modifiers                          //
     ////////////////////////////////////////
 
-    modifier canOpenRound() {
+    modifier roundMustBeDone() {
         if (
             s_roundStats[s_roundCounter].status == DataTypesLib.GameStatus.Open
                 || s_roundStats[s_roundCounter].status == DataTypesLib.GameStatus.Paused
@@ -134,7 +134,7 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /**
      * @notice Creates a new round with open status
      */
-    function createRound() public onlyOwner canOpenRound {
+    function createRound() public onlyOwner roundMustBeDone {
         s_roundCounter++;
         s_roundStats[s_roundCounter].status = DataTypesLib.GameStatus.Open;
 
@@ -187,11 +187,17 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
         emit RoundResultsAmended(s_roundCounter, lowerWinner, upperWinner, block.timestamp);
 
-        uint256 roundWinnersCount = getTotalWinnersPerRound(s_roundCounter);
+        uint256 roundWinnersCount = getTotalWinnersCountPerRound(s_roundCounter);
 
         if (roundWinnersCount > 0) {
             s_roundStats[s_roundCounter].status = DataTypesLib.GameStatus.Claimable;
         }
+    }
+
+    function withdraw(address to, uint256 amount) public onlyOwner {
+        // TODO: Add a check to make sure the contract has enough funds to pay winners
+        // that have not claimed their winnings yet
+        payable(to).transfer(amount);
     }
 
     /**
@@ -282,9 +288,6 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
             emit TicketClaimed(round, digits, gameType, tier, number, tokenId, winnings, msg.sender);
         }
-
-        // TODO: Update the winnersClaimedCount and close round if all winners have claimed
-        // DataTypesLib.TwoDigitStatsPerTier storage tierStats = roundStats.twoDigitStatsPerTier[tier];
     }
 
     ////////////////////////////////////////
@@ -372,7 +375,7 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
      * @param round Round number
      */
     function _closeRound(uint16 round) internal {
-        uint16 roundWinnersCount = getTotalWinnersPerRound(round);
+        uint16 roundWinnersCount = getTotalWinnersCountPerRound(round);
         uint16 roundWinnersClaimedCount = getTotalWinnersClaimedPerRound(round);
 
         if (roundWinnersCount == roundWinnersClaimedCount) {
@@ -459,7 +462,11 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
      * @param tier Tier price of the game
      * @return Number of winners that have claimed their winnings for a given tier in that round
      */
-    function getTierWinnersClaimedPerRound(uint16 round, DataTypesLib.GameEntryTier tier) public view returns (uint8) {
+    function getTierWinnersClaimedPerRound(uint16 round, DataTypesLib.GameEntryTier tier)
+        public
+        view
+        returns (uint16)
+    {
         return s_roundStats[round].twoDigitStatsPerTier[tier].winnersClaimedCount;
     }
 
@@ -468,7 +475,7 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
      * @param round Round number
      * @return Total number of winners that have claimed their winnings in that round
      */
-    function getTotalWinnersClaimedPerRound(uint16 round) public view returns (uint8) {
+    function getTotalWinnersClaimedPerRound(uint16 round) public view returns (uint16) {
         return s_roundStats[round].twoDigitStatsPerTier[DataTypesLib.GameEntryTier.One].winnersClaimedCount
             + s_roundStats[round].twoDigitStatsPerTier[DataTypesLib.GameEntryTier.Two].winnersClaimedCount
             + s_roundStats[round].twoDigitStatsPerTier[DataTypesLib.GameEntryTier.Three].winnersClaimedCount;
@@ -477,23 +484,68 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /**
      * @notice Only used for two digits games
      * @param round Round number
-     * @return Total winners for a given round
+     * @param tier Tier price of the game
+     * @return Total unlcaimed winnings value for a given tier a round
      */
-    function getTotalWinnersPerRound(uint16 round) public view returns (uint16) {
+    function getUnclaimedWinningsPerTierAndRound(uint16 round, DataTypesLib.GameEntryTier tier)
+        public
+        view
+        returns (uint256)
+    {
+        uint16 tierWinnerCount = getTierWinnerCountPerRound(round, tier);
+        uint16 winnersClaimedCount = getTierWinnersClaimedPerRound(round, tier);
+
+        uint16 unclaimedWinnersCount = tierWinnerCount - winnersClaimedCount;
+
+        if (unclaimedWinnersCount == 0) {
+            return 0;
+        }
+
+        return unclaimedWinnersCount * getGameTokenAmountFee(DataTypesLib.GameDigits.Two, tier) * s_paymentFactor;
+    }
+    // TODO: Continue from here
+    /**
+     * @notice Only used for two digits games
+     * @param round Round number
+     * @return Total unlcaimed winnings value for a given round
+     */
+
+    function getTotalUnclaimedWinningsPerRound(uint16 round) public view returns (uint256) {
+        uint256 tierOneUnclaimedWinnings = getUnclaimedWinningsPerTierAndRound(round, DataTypesLib.GameEntryTier.One);
+        uint256 tierTwoUnclaimedWinnings = getUnclaimedWinningsPerTierAndRound(round, DataTypesLib.GameEntryTier.Two);
+        uint256 tierThreeUnclaimedWinnings =
+            getUnclaimedWinningsPerTierAndRound(round, DataTypesLib.GameEntryTier.Three);
+
+        return tierOneUnclaimedWinnings + tierTwoUnclaimedWinnings + tierThreeUnclaimedWinnings;
+    }
+
+    /**
+     * @notice Only used for two digits games
+     * @param round Round number
+     * @param tier Tier price of the game
+     * @return Number of Upper and Lower winners for a given tier in that round
+     */
+    function getTierWinnerCountPerRound(uint16 round, DataTypesLib.GameEntryTier tier) public view returns (uint16) {
         uint8 lowerWinner = s_roundStats[round].lowerWinner;
         uint8 upperWinner = s_roundStats[round].upperWinner;
 
-        uint16 lowerWinnerCount = s_roundStats[round].twoDigitStatsPerTier[DataTypesLib.GameEntryTier.One]
-            .ticketCountPerLowerNumber[lowerWinner]
-            + s_roundStats[round].twoDigitStatsPerTier[DataTypesLib.GameEntryTier.Two].ticketCountPerLowerNumber[lowerWinner]
-            + s_roundStats[round].twoDigitStatsPerTier[DataTypesLib.GameEntryTier.Three].ticketCountPerLowerNumber[lowerWinner];
-
-        uint16 upperWinnerCount = s_roundStats[round].twoDigitStatsPerTier[DataTypesLib.GameEntryTier.One]
-            .ticketCountPerUpperNumber[upperWinner]
-            + s_roundStats[round].twoDigitStatsPerTier[DataTypesLib.GameEntryTier.Two].ticketCountPerUpperNumber[upperWinner]
-            + s_roundStats[round].twoDigitStatsPerTier[DataTypesLib.GameEntryTier.Three].ticketCountPerUpperNumber[upperWinner];
+        uint16 lowerWinnerCount = s_roundStats[round].twoDigitStatsPerTier[tier].ticketCountPerLowerNumber[lowerWinner];
+        uint16 upperWinnerCount = s_roundStats[round].twoDigitStatsPerTier[tier].ticketCountPerUpperNumber[upperWinner];
 
         return lowerWinnerCount + upperWinnerCount;
+    }
+    /**
+     * @notice Only used for two digits games
+     * @param round Round number
+     * @return Total winners for a given round
+     */
+
+    function getTotalWinnersCountPerRound(uint16 round) public view roundMustBeDone returns (uint16) {
+        uint16 totalWinnersCount = getTierWinnerCountPerRound(round, DataTypesLib.GameEntryTier.One)
+            + getTierWinnerCountPerRound(round, DataTypesLib.GameEntryTier.Two)
+            + getTierWinnerCountPerRound(round, DataTypesLib.GameEntryTier.Three);
+
+        return totalWinnersCount;
     }
 
     /**
@@ -569,7 +621,9 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
      */
 
     function reverseTwoDigitUint8(uint8 number) public pure returns (uint8) {
-        require(number < 100, "Number must be less than 100");
+        if (number < MIN_NUMBER || number > MAX_TWO_DIGIT_GAME_NUMBER) {
+            revert LotteryEngine__NumberOutOfRange();
+        }
 
         uint8 tens = number / 10;
         uint8 ones = number % 10;
