@@ -55,7 +55,6 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         uint8 number,
         address player
     );
-
     event TicketClaimed(
         uint16 indexed round,
         DataTypesLib.GameDigits digits,
@@ -65,6 +64,9 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         uint256 tokenId,
         uint256 winnings,
         address player
+    );
+    event EntryFeeChanged(
+        DataTypesLib.GameDigits indexed digits, DataTypesLib.GameEntryTier indexed tier, uint256 indexed fee
     );
 
     ////////////////////////////////////////
@@ -159,6 +161,10 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         emit RoundPaused(s_roundCounter, block.timestamp);
     }
 
+    /**
+     * @dev Unpauses the current round
+     * @notice Unpause the ticket sales for the current round
+     */
     function unpauseRound() public onlyOwner {
         if (s_roundStats[s_roundCounter].status != DataTypesLib.GameStatus.Paused) {
             revert LotteryEngine__RoundMustBePaused();
@@ -211,6 +217,25 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         if (roundWinnersCount > 0) {
             s_roundStats[s_roundCounter].status = DataTypesLib.GameStatus.Claimable;
         }
+    }
+
+    /**
+     *
+     * @param gameDigits Digits of the game, currently only 2 digits is supported
+     * @param gameEntryTier Tier of the game, maps to the entry fee
+     * @param fee USD fee of the game tier in WEI
+     */
+    function setGameEntryFee(DataTypesLib.GameDigits gameDigits, DataTypesLib.GameEntryTier gameEntryTier, uint256 fee)
+        public
+        onlyOwner
+        roundMustBeDone
+    {
+        if (fee == 0) {
+            revert LotteryEngine__IncorrectTierFee();
+        }
+        s_gameEntryFees[gameDigits].feePerTier[gameEntryTier] = fee;
+
+        emit EntryFeeChanged(gameDigits, gameEntryTier, fee);
     }
 
     /**

@@ -68,6 +68,9 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
         uint256 winnings,
         address player
     );
+    event EntryFeeChanged(
+        DataTypesLib.GameDigits indexed digits, DataTypesLib.GameEntryTier indexed tier, uint256 indexed fee
+    );
 
     ////////////////////////////////////////
     // Modifiers & Helpers                //
@@ -360,6 +363,49 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
         uint256 roundStatus = uint256(status);
 
         assertEq(roundStatus, expectedStatus);
+    }
+
+    ////////////////////////////////////////
+    // setGameEntryFee Tests              //
+    ////////////////////////////////////////
+
+    function testLEV1SetGameEntryFeeRevertsWhenNotOwner() public {
+        uint256 gameFeeTierThree = 2 ether;
+
+        vm.expectRevert();
+        lotteryEngineV1.setGameEntryFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Three, gameFeeTierThree);
+    }
+
+    function testLEV1SetGameEntryFeeRevertsWhenRoundOngoing() public createNewRound {
+        uint256 gameFeeTierThree = 2 ether;
+
+        vm.prank(LotteryEngineV1(engineProxyAddress).owner());
+        vm.expectRevert(LotteryEngineV1.LotteryEngine__CurrentRoundOngoing.selector);
+        lotteryEngineV1.setGameEntryFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Three, gameFeeTierThree);
+    }
+
+    function testLEV1SetGameEntryFeeRevertsWhenFeeIsZero() public {
+        uint256 gameFeeTierThree = 0;
+
+        vm.prank(LotteryEngineV1(engineProxyAddress).owner());
+        vm.expectRevert(LotteryEngineV1.LotteryEngine__IncorrectTierFee.selector);
+        lotteryEngineV1.setGameEntryFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Three, gameFeeTierThree);
+    }
+
+    function testLEV1SetGameEntryFeeUpdatesAndEmits(uint256 _tier) public {
+        _tier = bound(_tier, 0, 2);
+
+        uint256 updatedGameFee = 2 ether;
+        uint256 expectedGameFee = updatedGameFee;
+        DataTypesLib.GameEntryTier tier = DataTypesLib.GameEntryTier(_tier);
+
+        vm.prank(LotteryEngineV1(engineProxyAddress).owner());
+        vm.expectEmit(true, true, true, false, engineProxyAddress);
+        emit EntryFeeChanged(DataTypesLib.GameDigits.Two, tier, updatedGameFee);
+        lotteryEngineV1.setGameEntryFee(DataTypesLib.GameDigits.Two, tier, updatedGameFee);
+
+        uint256 gameFee = lotteryEngineV1.getGameFee(DataTypesLib.GameDigits.Two, tier);
+        assertEq(gameFee, expectedGameFee);
     }
 
     ////////////////////////////////////////
