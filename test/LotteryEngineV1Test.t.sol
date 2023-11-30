@@ -42,6 +42,7 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
 
     event RoundCreated(uint16 indexed round, uint256 timestamp);
     event RoundPaused(uint16 indexed round, uint256 timestamp);
+    event RoundUnpaused(uint16 indexed round, uint256 timestamp);
     event RoundResultsPosted(
         uint16 indexed round, uint8 indexed lowerWinner, uint8 indexed upperWinner, uint256 timestamp
     );
@@ -134,6 +135,38 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
         vm.prank(LotteryEngineV1(engineProxyAddress).owner());
         emit RoundPaused(round, block.timestamp);
         lotteryEngineV1.pauseRound();
+
+        (DataTypesLib.GameStatus status,,,,) = lotteryEngineV1.getRoundInfo(1);
+
+        uint256 roundStatus = uint256(status);
+        assertEq(roundStatus, expectedStatus);
+    }
+
+    ////////////////////////////////////////
+    // unpauseRound Tests                 //
+    ////////////////////////////////////////
+
+    function testLEV1UnpauseRoundRevertsWhenNotOwner() public createNewRound {
+        vm.expectRevert();
+        lotteryEngineV1.unpauseRound();
+    }
+
+    function testLEV1UnpauseRoundRevertsWhenNotPaused() public {
+        vm.prank(LotteryEngineV1(engineProxyAddress).owner());
+        vm.expectRevert(LotteryEngineV1.LotteryEngine__RoundMustBePaused.selector);
+        lotteryEngineV1.unpauseRound();
+    }
+
+    function testLEV1UnpauseRoundWorksAndEmmits() public createNewRound {
+        uint16 round = 1;
+        uint256 expectedStatus = uint256(DataTypesLib.GameStatus.Open);
+
+        vm.startPrank(LotteryEngineV1(engineProxyAddress).owner());
+        lotteryEngineV1.pauseRound();
+        vm.expectEmit(true, true, false, false, engineProxyAddress);
+        emit RoundUnpaused(round, block.timestamp);
+        lotteryEngineV1.unpauseRound();
+        vm.stopPrank();
 
         (DataTypesLib.GameStatus status,,,,) = lotteryEngineV1.getRoundInfo(1);
 

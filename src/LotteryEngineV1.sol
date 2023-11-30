@@ -39,6 +39,7 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     event RoundCreated(uint16 indexed round, uint256 timestamp);
     event RoundPaused(uint16 indexed round, uint256 timestamp);
+    event RoundUnpaused(uint16 indexed round, uint256 timestamp);
     event RoundResultsPosted(
         uint16 indexed round, uint8 indexed lowerWinner, uint8 indexed upperWinner, uint256 timestamp
     );
@@ -156,6 +157,15 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         s_roundStats[s_roundCounter].status = DataTypesLib.GameStatus.Paused;
 
         emit RoundPaused(s_roundCounter, block.timestamp);
+    }
+
+    function unpauseRound() public onlyOwner {
+        if (s_roundStats[s_roundCounter].status != DataTypesLib.GameStatus.Paused) {
+            revert LotteryEngine__RoundMustBePaused();
+        }
+        s_roundStats[s_roundCounter].status = DataTypesLib.GameStatus.Open;
+
+        emit RoundUnpaused(s_roundCounter, block.timestamp);
     }
 
     /**
