@@ -15,6 +15,7 @@ contract HelperConfig is Script {
     uint256 twoDigitGameFee1 = 1 ether;
     uint256 twoDigitGameFee2 = 2 ether;
     uint256 twoDigitGameFee3 = 3 ether;
+    uint8 payoutFactor = 25;
 
     constructor() {
         if (block.chainid == 11155111) {
@@ -30,6 +31,7 @@ contract HelperConfig is Script {
         uint256 twoDigitGameFee1;
         uint256 twoDigitGameFee2;
         uint256 twoDigitGameFee3;
+        uint8 payoutFactor;
     }
 
     function getSepoliaEthConfig() public view returns (NetworkConfig memory sepoliaNetworkConfig) {
@@ -38,7 +40,8 @@ contract HelperConfig is Script {
             priceFeed: 0x694AA1769357215DE4FAC081bf1f309aDC325306, // ETH/USD
             twoDigitGameFee1: twoDigitGameFee1,
             twoDigitGameFee2: twoDigitGameFee2,
-            twoDigitGameFee3: twoDigitGameFee3
+            twoDigitGameFee3: twoDigitGameFee3,
+            payoutFactor: payoutFactor
         });
     }
 
@@ -59,7 +62,8 @@ contract HelperConfig is Script {
             priceFeed: address(ethUsdPriceFeed),
             twoDigitGameFee1: twoDigitGameFee1,
             twoDigitGameFee2: twoDigitGameFee2,
-            twoDigitGameFee3: twoDigitGameFee3
+            twoDigitGameFee3: twoDigitGameFee3,
+            payoutFactor: payoutFactor
         });
     }
 }

@@ -14,6 +14,7 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
     DeployLotteryEngine public deployLotteryEngine;
     LotteryEngineV1 public lotteryEngineV1;
     TicketV1 public ticketV1;
+    uint8 payoutFactor;
 
     address engineProxyAddress;
     address ticketProxyAddress;
@@ -28,7 +29,7 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
 
     function setUp() public {
         deployLotteryEngine = new DeployLotteryEngine();
-        (engineProxyAddress, ticketProxyAddress,,) = deployLotteryEngine.run();
+        (engineProxyAddress, ticketProxyAddress,,, payoutFactor) = deployLotteryEngine.run();
         lotteryEngineV1 = LotteryEngineV1(engineProxyAddress);
         ticketV1 = TicketV1(ticketProxyAddress);
 
@@ -412,36 +413,36 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
     ////////////////////////////////////////
 
     function testLEV1SetGamePayOutFactorRevertsWhenNotOwner() public {
-        uint8 payoutFactor = 2;
+        uint8 newPayoutFactor = 2;
 
         vm.expectRevert();
-        lotteryEngineV1.setGamePayoutFactor(payoutFactor);
+        lotteryEngineV1.setGamePayoutFactor(newPayoutFactor);
     }
 
     function testLEV1SetGamePayoutFactoRevertsWhenGameIsOngoing() public createNewRound {
-        uint8 payoutFactor = 2;
+        uint8 newPayoutFactor = 2;
 
         vm.prank(LotteryEngineV1(engineProxyAddress).owner());
         vm.expectRevert(LotteryEngineV1.LotteryEngine__CurrentRoundOngoing.selector);
-        lotteryEngineV1.setGamePayoutFactor(payoutFactor);
+        lotteryEngineV1.setGamePayoutFactor(newPayoutFactor);
     }
 
     function testLEV1SetGamePayoutFactorRevertsIfInputIsZero() public {
-        uint8 payoutFactor = 0;
+        uint8 newPayoutFactor = 0;
 
         vm.prank(LotteryEngineV1(engineProxyAddress).owner());
         vm.expectRevert(LotteryEngineV1.LotteryEngine__InputCannotBeZero.selector);
-        lotteryEngineV1.setGamePayoutFactor(payoutFactor);
+        lotteryEngineV1.setGamePayoutFactor(newPayoutFactor);
     }
 
-    function testLEV1SeGamePayoutFactorUpdatesAndEmits(uint8 payoutFactor) public {
-        payoutFactor = uint8(bound(payoutFactor, 1, 99));
-        uint8 expectedPayoutFactor = payoutFactor;
+    function testLEV1SeGamePayoutFactorUpdatesAndEmits(uint8 newPayoutFactor) public {
+        newPayoutFactor = uint8(bound(newPayoutFactor, 1, 99));
+        uint8 expectedPayoutFactor = newPayoutFactor;
 
         vm.prank(LotteryEngineV1(engineProxyAddress).owner());
         vm.expectEmit(true, true, true, false, engineProxyAddress);
-        emit PayoutFactorChanged(payoutFactor, block.timestamp);
-        lotteryEngineV1.setGamePayoutFactor(payoutFactor);
+        emit PayoutFactorChanged(newPayoutFactor, block.timestamp);
+        lotteryEngineV1.setGamePayoutFactor(newPayoutFactor);
 
         uint8 gamePayoutFactor = lotteryEngineV1.getPayoutFactor();
         assertEq(gamePayoutFactor, expectedPayoutFactor);
@@ -461,9 +462,6 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
         uint16 round = 1;
         DataTypesLib.GameEntryTier tier = DataTypesLib.GameEntryTier.One;
         uint256 gameFee = lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, tier);
-
-        uint256 payoutFactor = lotteryEngineV1.getPayoutFactor();
-        console.log("payoutFactor: %s", payoutFactor);
 
         uint8 lowerWinner = 99;
         uint8 upperWinner = 98;
@@ -1415,8 +1413,7 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
     }
 
     function testLEV1GetPayoutFactor() public {
-        uint8 expectedPayoutFactor = 25;
-        assertEq(LotteryEngineV1(engineProxyAddress).getPayoutFactor(), expectedPayoutFactor);
+        assertEq(LotteryEngineV1(engineProxyAddress).getPayoutFactor(), payoutFactor);
     }
 
     function testLEV1ReveseTwoDigitUint8Reverts() public {

@@ -14,6 +14,7 @@ contract DeployLotteryEngine is Script {
     uint256 deployerKey;
     address priceFeed;
     uint256[3] twoDigitGameFees;
+    uint8 payoutFactor;
 
     constructor() {
         (
@@ -21,24 +22,33 @@ contract DeployLotteryEngine is Script {
             address _priceFeed,
             uint256 twoDigitGameFee1,
             uint256 twoDigitGameFee2,
-            uint256 twoDigitGameFee3
+            uint256 twoDigitGameFee3,
+            uint8 _payoutFactor
         ) = helperConfig.activeNetworkConfig();
         // owner = address(uint160(uint256(deployerKey)));
         owner = vm.addr(_deployerKey);
         deployerKey = _deployerKey;
         priceFeed = _priceFeed;
+        payoutFactor = _payoutFactor;
         twoDigitGameFees = [twoDigitGameFee1, twoDigitGameFee2, twoDigitGameFee3];
     }
 
     function run()
         external
-        returns (address engineProxy, address ticketProxy, address contractOwner, uint256[3] memory _twoDigitGameFees)
+        returns (
+            address engineProxy,
+            address ticketProxy,
+            address contractOwner,
+            uint256[3] memory _twoDigitGameFees,
+            uint8 _payoutFactor
+        )
     {
         (engineProxy) = deployLotteryEngine();
         (ticketProxy) = deployTicket();
         initializeContracts(ticketProxy, engineProxy);
         contractOwner = owner;
         _twoDigitGameFees = twoDigitGameFees;
+        _payoutFactor = payoutFactor;
     }
 
     function deployLotteryEngine() public returns (address) {
@@ -61,7 +71,7 @@ contract DeployLotteryEngine is Script {
 
     function initializeContracts(address ticketProxy, address engineProxy) public {
         vm.startBroadcast(deployerKey);
-        LotteryEngineV1(engineProxy).initialize(owner, ticketProxy, priceFeed, twoDigitGameFees);
+        LotteryEngineV1(engineProxy).initialize(owner, ticketProxy, priceFeed, twoDigitGameFees, payoutFactor);
         TicketV1(address(ticketProxy)).initialize(owner, engineProxy, owner);
         vm.stopBroadcast();
     }

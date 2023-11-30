@@ -13,7 +13,7 @@ contract UpgradeLotteryEngine is Script {
     uint256 deployerKey;
 
     constructor() {
-        (deployerKey,,,,) = helperConfig.activeNetworkConfig();
+        (deployerKey,,,,,) = helperConfig.activeNetworkConfig();
     }
 
     function run() external returns (address) {

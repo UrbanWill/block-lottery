@@ -122,14 +122,15 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         address initialOwner,
         address _ticketAddress,
         address priceFeedAddress,
-        uint256[3] memory _twoDigitGameFees
+        uint256[3] memory _twoDigitGameFees,
+        uint8 _payoutFactor
     ) public initializer {
         __Ownable_init(initialOwner);
         __UUPSUpgradeable_init();
 
         s_ticketAddress = _ticketAddress;
         s_priceFeed = priceFeedAddress;
-        s_payoutFactor = 25; // TODO: Move this to a config file
+        s_payoutFactor = _payoutFactor; // TODO: Move this to a config file
 
         s_gameEntryFees[DataTypesLib.GameDigits.Two].feePerTier[DataTypesLib.GameEntryTier.One] = _twoDigitGameFees[0];
         s_gameEntryFees[DataTypesLib.GameDigits.Two].feePerTier[DataTypesLib.GameEntryTier.Two] = _twoDigitGameFees[1];

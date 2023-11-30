@@ -23,12 +23,13 @@ contract DeployAndUpgradeTest is StdCheats, Test {
     address owner;
     address USER = address(0x1);
     uint256[3] twoDigitGameFees;
+    uint8 payoutFactor;
 
     function setUp() public {
         deployLotteryEngine = new DeployLotteryEngine();
         upgradeLotteryEngine = new UpgradeLotteryEngine();
         upgradeTicket = new UpgradeTicket();
-        (engineProxyAddress, ticketProxyAddress, owner, twoDigitGameFees) = deployLotteryEngine.run();
+        (engineProxyAddress, ticketProxyAddress, owner, twoDigitGameFees, payoutFactor) = deployLotteryEngine.run();
     }
 
     ///////////////////////
@@ -140,5 +141,9 @@ contract DeployAndUpgradeTest is StdCheats, Test {
             ),
             twoDigitGameFees[2]
         );
+    }
+
+    function testEngineV1PayoutFactorIsSetCorrectly() public {
+        assertEq(payoutFactor, LotteryEngineV1(engineProxyAddress).getPayoutFactor());
     }
 }
