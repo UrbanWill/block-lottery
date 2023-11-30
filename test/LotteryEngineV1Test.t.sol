@@ -71,7 +71,7 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
     event EntryFeeChanged(
         DataTypesLib.GameDigits indexed digits, DataTypesLib.GameEntryTier indexed tier, uint256 indexed fee
     );
-
+    event PayoutFactorChanged(uint8 indexed payoutFactor, uint256 timestamp);
     ////////////////////////////////////////
     // Modifiers & Helpers                //
     ////////////////////////////////////////
@@ -388,7 +388,7 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
         uint256 gameFeeTierThree = 0;
 
         vm.prank(LotteryEngineV1(engineProxyAddress).owner());
-        vm.expectRevert(LotteryEngineV1.LotteryEngine__IncorrectTierFee.selector);
+        vm.expectRevert(LotteryEngineV1.LotteryEngine__InputCannotBeZero.selector);
         lotteryEngineV1.setGameEntryFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Three, gameFeeTierThree);
     }
 
@@ -407,6 +407,45 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
         uint256 gameFee = lotteryEngineV1.getGameFee(DataTypesLib.GameDigits.Two, tier);
         assertEq(gameFee, expectedGameFee);
     }
+    ////////////////////////////////////////
+    // setGamePayoutFactor Tests          //
+    ////////////////////////////////////////
+
+    function testLEV1SetGamePayOutFactorRevertsWhenNotOwner() public {
+        uint8 payoutFactor = 2;
+
+        vm.expectRevert();
+        lotteryEngineV1.setGamePayoutFactor(payoutFactor);
+    }
+
+    function testLEV1SetGamePayoutFactoRevertsWhenGameIsOngoing() public createNewRound {
+        uint8 payoutFactor = 2;
+
+        vm.prank(LotteryEngineV1(engineProxyAddress).owner());
+        vm.expectRevert(LotteryEngineV1.LotteryEngine__CurrentRoundOngoing.selector);
+        lotteryEngineV1.setGamePayoutFactor(payoutFactor);
+    }
+
+    function testLEV1SetGamePayoutFactorRevertsIfInputIsZero() public {
+        uint8 payoutFactor = 0;
+
+        vm.prank(LotteryEngineV1(engineProxyAddress).owner());
+        vm.expectRevert(LotteryEngineV1.LotteryEngine__InputCannotBeZero.selector);
+        lotteryEngineV1.setGamePayoutFactor(payoutFactor);
+    }
+
+    function testLEV1SeGamePayoutFactorUpdatesAndEmits(uint8 payoutFactor) public {
+        payoutFactor = uint8(bound(payoutFactor, 1, 99));
+        uint8 expectedPayoutFactor = payoutFactor;
+
+        vm.prank(LotteryEngineV1(engineProxyAddress).owner());
+        vm.expectEmit(true, true, true, false, engineProxyAddress);
+        emit PayoutFactorChanged(payoutFactor, block.timestamp);
+        lotteryEngineV1.setGamePayoutFactor(payoutFactor);
+
+        uint8 gamePayoutFactor = lotteryEngineV1.getPayoutFactor();
+        assertEq(gamePayoutFactor, expectedPayoutFactor);
+    }
 
     ////////////////////////////////////////
     // withdrawl Tests                    //
@@ -417,17 +456,14 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
         lotteryEngineV1.withdraw(LOTTERY_OWNER, 1 ether);
     }
 
-    function testLEV1WithdrawRevertsWhenRoundIsOngoing() public createNewRound {
-        vm.prank(LotteryEngineV1(engineProxyAddress).owner());
-        vm.expectRevert(LotteryEngineV1.LotteryEngine__CurrentRoundOngoing.selector);
-        lotteryEngineV1.withdraw(LOTTERY_OWNER, 1 ether);
-    }
-
     function testLEV1WithdrawRevertsWhenAmountBiggerThanDebt() public createNewRound buyTwoDigitsTicket {
         uint8 number = 99;
         uint16 round = 1;
         DataTypesLib.GameEntryTier tier = DataTypesLib.GameEntryTier.One;
         uint256 gameFee = lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, tier);
+
+        uint256 payoutFactor = lotteryEngineV1.getPayoutFactor();
+        console.log("payoutFactor: %s", payoutFactor);
 
         uint8 lowerWinner = 99;
         uint8 upperWinner = 98;
@@ -445,6 +481,12 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
         vm.prank(LotteryEngineV1(engineProxyAddress).owner());
         vm.expectRevert(LotteryEngineV1.LotteryEngine__AmountMustBeLessThanTotalUnclaimedWinnings.selector);
         lotteryEngineV1.withdraw(LOTTERY_OWNER, lotteryEngineBalance);
+    }
+
+    function testLEV1WithdrawRevertsWhenRoundIsOngoing() public createNewRound {
+        vm.prank(LotteryEngineV1(engineProxyAddress).owner());
+        vm.expectRevert(LotteryEngineV1.LotteryEngine__CurrentRoundOngoing.selector);
+        lotteryEngineV1.withdraw(LOTTERY_OWNER, 1 ether);
     }
 
     function testLEV1WithdrawWorks() public createNewRound buyTwoDigitsTicket {
@@ -741,7 +783,7 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
         uint8 upperWinner = 98;
         uint256 expectedWinnings = lotteryEngineV1.getGameTokenAmountFee(
             DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One
-        ) * lotteryEngineV1.s_paymentFactor();
+        ) * lotteryEngineV1.getPayoutFactor();
         uint256 expectedBalance = address(USER).balance + expectedWinnings;
 
         vm.startPrank(LotteryEngineV1(engineProxyAddress).owner());
@@ -1176,10 +1218,10 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
         uint256 tierThreeGameFee =
             lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Three);
 
-        uint256 expectedUnclaimedTierOne = tierOneGameFee * unclaimedTierOneTickets * lotteryEngineV1.s_paymentFactor();
-        uint256 expectedUnclaimedTierTwo = tierTwoGameFee * unclaimedTierTwoTickets * lotteryEngineV1.s_paymentFactor();
+        uint256 expectedUnclaimedTierOne = tierOneGameFee * unclaimedTierOneTickets * lotteryEngineV1.getPayoutFactor();
+        uint256 expectedUnclaimedTierTwo = tierTwoGameFee * unclaimedTierTwoTickets * lotteryEngineV1.getPayoutFactor();
         uint256 expectedUnclaimedTierThree =
-            tierThreeGameFee * unclaimedTierThreeTickets * lotteryEngineV1.s_paymentFactor();
+            tierThreeGameFee * unclaimedTierThreeTickets * lotteryEngineV1.getPayoutFactor();
 
         vm.startPrank(USER);
         // Buys 2 tier One tickets
@@ -1241,10 +1283,10 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
         uint256 tierThreeGameFee =
             lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Three);
 
-        uint256 expectedUnclaimedTierOne = tierOneGameFee * unclaimedTierOneTickets * lotteryEngineV1.s_paymentFactor();
-        uint256 expectedUnclaimedTierTwo = tierTwoGameFee * unclaimedTierTwoTickets * lotteryEngineV1.s_paymentFactor();
+        uint256 expectedUnclaimedTierOne = tierOneGameFee * unclaimedTierOneTickets * lotteryEngineV1.getPayoutFactor();
+        uint256 expectedUnclaimedTierTwo = tierTwoGameFee * unclaimedTierTwoTickets * lotteryEngineV1.getPayoutFactor();
         uint256 expectedUnclaimedTierThree =
-            tierThreeGameFee * unclaimedTierThreeTickets * lotteryEngineV1.s_paymentFactor();
+            tierThreeGameFee * unclaimedTierThreeTickets * lotteryEngineV1.getPayoutFactor();
 
         uint256 expectedTotalUnclaimed =
             expectedUnclaimedTierOne + expectedUnclaimedTierTwo + expectedUnclaimedTierThree;
@@ -1298,10 +1340,10 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
         uint256 tierThreeGameFee =
             lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Three);
 
-        uint256 expectedUnclaimedTierOne = tierOneGameFee * unclaimedTierOneTickets * lotteryEngineV1.s_paymentFactor();
-        uint256 expectedUnclaimedTierTwo = tierTwoGameFee * unclaimedTierTwoTickets * lotteryEngineV1.s_paymentFactor();
+        uint256 expectedUnclaimedTierOne = tierOneGameFee * unclaimedTierOneTickets * lotteryEngineV1.getPayoutFactor();
+        uint256 expectedUnclaimedTierTwo = tierTwoGameFee * unclaimedTierTwoTickets * lotteryEngineV1.getPayoutFactor();
         uint256 expectedUnclaimedTierThree =
-            tierThreeGameFee * unclaimedTierThreeTickets * lotteryEngineV1.s_paymentFactor();
+            tierThreeGameFee * unclaimedTierThreeTickets * lotteryEngineV1.getPayoutFactor();
 
         uint256 totalUnclaimedRoundOne =
             expectedUnclaimedTierOne + expectedUnclaimedTierTwo + expectedUnclaimedTierThree;
@@ -1339,7 +1381,7 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
         uint16 roundTwo = 2;
         uint256 unclaimedTierOneTicketsRoundTwo = 1;
         uint256 expectedUnclaimedTierOneRoundTwo =
-            tierOneGameFee * unclaimedTierOneTicketsRoundTwo * lotteryEngineV1.s_paymentFactor();
+            tierOneGameFee * unclaimedTierOneTicketsRoundTwo * lotteryEngineV1.getPayoutFactor();
         uint256 expectedTotalUnclaimed = totalUnclaimedRoundOne + expectedUnclaimedTierOneRoundTwo;
 
         vm.prank(USER);
@@ -1370,6 +1412,11 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
             ),
             twoDigitGameFees[2]
         );
+    }
+
+    function testLEV1GetPayoutFactor() public {
+        uint8 expectedPayoutFactor = 25;
+        assertEq(LotteryEngineV1(engineProxyAddress).getPayoutFactor(), expectedPayoutFactor);
     }
 
     function testLEV1ReveseTwoDigitUint8Reverts() public {

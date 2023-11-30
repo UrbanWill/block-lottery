@@ -8,6 +8,7 @@ import {TicketV1} from "./TicketV1.sol";
 import {DataTypesLib} from "./libraries/DataTypesLib.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import {OracleLib} from "./libraries/OracleLib.sol";
+import {Test, console} from "forge-std/Test.sol";
 
 contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     ////////////////////////////////////////
@@ -21,9 +22,9 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     uint16 private constant CLAIMABLE_DELAY = 1 hours;
     uint16 s_roundCounter = 0;
+    uint8 private s_payoutFactor;
     uint8 private constant MIN_NUMBER = 1;
     uint8 private constant MAX_TWO_DIGIT_GAME_NUMBER = 99;
-    uint256 public constant s_paymentFactor = 25;
     uint256 private constant ADDITIONAL_FEED_PRECISION = 1e10;
     uint256 private constant PRECISION = 1e18;
 
@@ -68,6 +69,7 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     event EntryFeeChanged(
         DataTypesLib.GameDigits indexed digits, DataTypesLib.GameEntryTier indexed tier, uint256 indexed fee
     );
+    event PayoutFactorChanged(uint8 indexed payoutFactor, uint256 timestamp);
 
     ////////////////////////////////////////
     // Errors                             //
@@ -84,6 +86,7 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error LotteryEngine__OnlyTicketOwnerCanClaimWinnings();
     error LotteryEngine__TicketAlreadyClaimed();
     error LotteryEngine__AmountMustBeLessThanTotalUnclaimedWinnings();
+    error LotteryEngine__InputCannotBeZero();
 
     ////////////////////////////////////////
     // Modifiers                          //
@@ -126,6 +129,7 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
         s_ticketAddress = _ticketAddress;
         s_priceFeed = priceFeedAddress;
+        s_payoutFactor = 25; // TODO: Move this to a config file
 
         s_gameEntryFees[DataTypesLib.GameDigits.Two].feePerTier[DataTypesLib.GameEntryTier.One] = _twoDigitGameFees[0];
         s_gameEntryFees[DataTypesLib.GameDigits.Two].feePerTier[DataTypesLib.GameEntryTier.Two] = _twoDigitGameFees[1];
@@ -231,11 +235,20 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         roundMustBeDone
     {
         if (fee == 0) {
-            revert LotteryEngine__IncorrectTierFee();
+            revert LotteryEngine__InputCannotBeZero();
         }
         s_gameEntryFees[gameDigits].feePerTier[gameEntryTier] = fee;
 
         emit EntryFeeChanged(gameDigits, gameEntryTier, fee);
+    }
+
+    function setGamePayoutFactor(uint8 payoutFactor) public onlyOwner roundMustBeDone {
+        if (payoutFactor == 0) {
+            revert LotteryEngine__InputCannotBeZero();
+        }
+        s_payoutFactor = payoutFactor;
+
+        emit PayoutFactorChanged(payoutFactor, block.timestamp);
     }
 
     /**
@@ -343,7 +356,7 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             _closeRound(round);
 
             TicketV1(s_ticketAddress).setTicketClaimed(tokenId);
-            uint256 winnings = getGameTokenAmountFee(digits, tier) * s_paymentFactor;
+            uint256 winnings = getGameTokenAmountFee(digits, tier) * getPayoutFactor();
             payable(msg.sender).transfer(winnings);
 
             emit TicketClaimed(round, digits, gameType, tier, number, tokenId, winnings, msg.sender);
@@ -561,7 +574,9 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             return 0;
         }
 
-        return unclaimedWinnersCount * getGameTokenAmountFee(DataTypesLib.GameDigits.Two, tier) * s_paymentFactor;
+        console.log("PayoutFactor Contract: ", getPayoutFactor());
+
+        return unclaimedWinnersCount * getGameTokenAmountFee(DataTypesLib.GameDigits.Two, tier) * getPayoutFactor();
     }
 
     /**
@@ -664,6 +679,13 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     {
         uint256 fee = getGameFee(gameDigits, gameEntryTier);
         return getTokenAmountFromUsd(fee);
+    }
+
+    /**
+     * @return Payout factor for the game
+     */
+    function getPayoutFactor() public view returns (uint8) {
+        return s_payoutFactor;
     }
 
     /**
