@@ -80,6 +80,7 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error LotteryEngine__RoundResultAmendMustBeWithinTime();
     error LotteryEngine__OnlyTicketOwnerCanClaimWinnings();
     error LotteryEngine__TicketAlreadyClaimed();
+    error LotteryEngine__AmountMustBeLessThanTotalUnclaimedWinnings();
 
     ////////////////////////////////////////
     // Modifiers                          //
@@ -176,6 +177,13 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         emit RoundResultsPosted(s_roundCounter, lowerWinner, upperWinner, block.timestamp);
         _closeRound(s_roundCounter);
     }
+    /**
+     * @notice Amend the results of the round. Will only work within the CLAIMABLE_DELAY time.
+     * @notice This function is called by a human and therefore subject to human error,
+     * this is the reason for the 1 hour delay before the round is claimable, to fix possible human errors
+     * @param lowerWinner Winning lower number for the round
+     * @param upperWinner Winning upper number for the round
+     */
 
     function amendRoundResults(uint8 lowerWinner, uint8 upperWinner) public onlyOwner {
         if (s_roundStats[s_roundCounter].clamableAt < block.timestamp) {
@@ -195,9 +203,21 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
     }
 
-    function withdraw(address to, uint256 amount) public onlyOwner {
-        // TODO: Add a check to make sure the contract has enough funds to pay winners
-        // that have not claimed their winnings yet
+    /**
+     * @notice Withdraws from the contract balance.
+     * @notice Cannot be used to withdraw user's unclaimed winnings.
+     * Cannot be withdraw if there is a game in progress as the winnings cannot be calculated.
+     * @param to Address to send the funds to
+     * @param amount Amount to withdraw
+     */
+    function withdraw(address to, uint256 amount) public onlyOwner roundMustBeDone {
+        uint256 totalUnclaimedWinnings = getTotalUnclaimedWinnings();
+        uint256 availableBalanceAfterWithdaw = address(this).balance - amount;
+
+        if (availableBalanceAfterWithdaw < totalUnclaimedWinnings) {
+            revert LotteryEngine__AmountMustBeLessThanTotalUnclaimedWinnings();
+        }
+
         payable(to).transfer(amount);
     }
 
@@ -236,6 +256,10 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         return tokenId;
     }
 
+    /**
+     * @notice Claim winnings for a given ticket
+     * @param tokenId Token ID of the ticket to claim winnings for
+     */
     function claimWinnings(uint256 tokenId) external {
         (
             bool claimed,

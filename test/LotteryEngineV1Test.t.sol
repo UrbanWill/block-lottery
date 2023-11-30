@@ -338,6 +338,64 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
         lotteryEngineV1.withdraw(LOTTERY_OWNER, 1 ether);
     }
 
+    function testLEV1WithdrawRevertsWhenRoundIsOngoing() public createNewRound {
+        vm.prank(LotteryEngineV1(engineProxyAddress).owner());
+        vm.expectRevert(LotteryEngineV1.LotteryEngine__CurrentRoundOngoing.selector);
+        lotteryEngineV1.withdraw(LOTTERY_OWNER, 1 ether);
+    }
+
+    function testLEV1WithdrawRevertsWhenAmountBiggerThanDebt() public createNewRound buyTwoDigitsTicket {
+        uint8 number = 99;
+        uint16 round = 1;
+        DataTypesLib.GameEntryTier tier = DataTypesLib.GameEntryTier.One;
+        uint256 gameFee = lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, tier);
+
+        uint8 lowerWinner = 99;
+        uint8 upperWinner = 98;
+
+        vm.prank(USER);
+        lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(round, DataTypesLib.GameType.Lower, tier, number, PUG_URI);
+
+        uint256 lotteryEngineBalance = address(engineProxyAddress).balance;
+
+        vm.startPrank(LotteryEngineV1(engineProxyAddress).owner());
+        lotteryEngineV1.pauseRound();
+        lotteryEngineV1.postRoundResults(lowerWinner, upperWinner);
+        vm.stopPrank();
+
+        vm.prank(LotteryEngineV1(engineProxyAddress).owner());
+        vm.expectRevert(LotteryEngineV1.LotteryEngine__AmountMustBeLessThanTotalUnclaimedWinnings.selector);
+        lotteryEngineV1.withdraw(LOTTERY_OWNER, lotteryEngineBalance);
+    }
+
+    function testLEV1WithdrawWorks() public createNewRound buyTwoDigitsTicket {
+        uint8 number = 99;
+        uint16 round = 1;
+        DataTypesLib.GameEntryTier tier = DataTypesLib.GameEntryTier.One;
+        uint256 gameFee = lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, tier);
+
+        uint8 lowerWinner = 99;
+        uint8 upperWinner = 98;
+
+        vm.prank(USER);
+        lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(round, DataTypesLib.GameType.Lower, tier, number, PUG_URI);
+
+        vm.startPrank(LotteryEngineV1(engineProxyAddress).owner());
+        lotteryEngineV1.pauseRound();
+        lotteryEngineV1.postRoundResults(lowerWinner, upperWinner);
+        vm.stopPrank();
+
+        uint256 lotteryEngineBalance = address(engineProxyAddress).balance;
+        uint256 lotteryEngineDebt = lotteryEngineV1.getTotalUnclaimedWinnings();
+        uint256 availableBalance = lotteryEngineBalance - lotteryEngineDebt;
+
+        vm.prank(LotteryEngineV1(engineProxyAddress).owner());
+        lotteryEngineV1.withdraw(LOTTERY_OWNER, availableBalance);
+
+        assertEq(address(LOTTERY_OWNER).balance, availableBalance);
+        assertEq(address(engineProxyAddress).balance, lotteryEngineDebt);
+    }
+
     ////////////////////////////////////////
     // buyTwoDigits Tests                 //
     ////////////////////////////////////////
