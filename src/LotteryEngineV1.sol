@@ -4,13 +4,13 @@ pragma solidity ^0.8.20;
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import {TicketV1} from "./TicketV1.sol";
 import {DataTypesLib} from "./libraries/DataTypesLib.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import {OracleLib} from "./libraries/OracleLib.sol";
-import {Test, console} from "forge-std/Test.sol";
 
-contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
+contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuardUpgradeable {
     ////////////////////////////////////////
     // Types                              //
     ////////////////////////////////////////
@@ -286,7 +286,7 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         DataTypesLib.GameEntryTier tier,
         uint8 number,
         string memory tokenUri
-    ) external payable roundMustBeOpen(round) returns (uint256) {
+    ) external payable roundMustBeOpen(round) nonReentrant returns (uint256) {
         if (number < MIN_NUMBER || number > MAX_TWO_DIGIT_GAME_NUMBER) {
             revert LotteryEngine__NumberOutOfRange();
         }
@@ -309,7 +309,7 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
      * @notice Claim winnings for a given ticket
      * @param tokenId Token ID of the ticket to claim winnings for
      */
-    function claimWinnings(uint256 tokenId) external {
+    function claimWinnings(uint256 tokenId) external nonReentrant {
         (
             bool claimed,
             uint16 round,
@@ -552,8 +552,6 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         if (unclaimedWinnersCount == 0) {
             return 0;
         }
-
-        console.log("PayoutFactor Contract: ", getPayoutFactor());
 
         return unclaimedWinnersCount * getGameTokenAmountFee(DataTypesLib.GameDigits.Two, tier) * getPayoutFactor();
     }
