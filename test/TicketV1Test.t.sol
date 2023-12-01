@@ -24,6 +24,8 @@ contract TicketV1Test is StdCheats, Test {
     DataTypesLib.GameEntryTier constant GAME_ENTRY_TIER = DataTypesLib.GameEntryTier.One;
     DataTypesLib.GameType constant GAME_TYPE = DataTypesLib.GameType.Lower;
     uint8 constant NUMBER = 1;
+    uint8[] lowerNumbers = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+    uint8[] upperNumbers = [11, 12, 13, 14, 15, 16, 17, 18, 19];
     string constant URI = "test";
 
     function setUp() public {
@@ -38,18 +40,19 @@ contract TicketV1Test is StdCheats, Test {
 
     function testTicketV1SafeMintRevertsNotMinterRole() public {
         vm.expectRevert();
-        ticketV1.safeMint(USER, ROUND, GAME_DIGITS, GAME_TYPE, GAME_ENTRY_TIER, NUMBER, URI);
+        ticketV1.safeMint(USER, ROUND, GAME_DIGITS, GAME_TYPE, GAME_ENTRY_TIER, lowerNumbers, upperNumbers, URI);
     }
 
     function testTicketV1SafeMintWorks() public {
         vm.prank(engineProxyAddress);
-        ticketV1.safeMint(USER, ROUND, GAME_DIGITS, GAME_TYPE, GAME_ENTRY_TIER, NUMBER, URI);
+        ticketV1.safeMint(USER, ROUND, GAME_DIGITS, GAME_TYPE, GAME_ENTRY_TIER, lowerNumbers, upperNumbers, URI);
         assertEq(ticketV1.ownerOf(0), USER);
     }
 
     function testTicketV1SafeMintSetTokenDataCorrectly() public {
         vm.prank(engineProxyAddress);
-        uint256 tokenIdOne = ticketV1.safeMint(USER, ROUND, GAME_DIGITS, GAME_TYPE, GAME_ENTRY_TIER, NUMBER, URI);
+        uint256 tokenIdOne =
+            ticketV1.safeMint(USER, ROUND, GAME_DIGITS, GAME_TYPE, GAME_ENTRY_TIER, lowerNumbers, upperNumbers, URI);
 
         (
             bool claimed,
@@ -57,8 +60,9 @@ contract TicketV1Test is StdCheats, Test {
             DataTypesLib.GameDigits gameDigits,
             DataTypesLib.GameType gameType,
             DataTypesLib.GameEntryTier entryTier,
-            uint8 number
-        ) = ticketV1.tokenInfo(tokenIdOne);
+            uint8[] memory ticketLowerNumbers,
+            uint8[] memory ticketUpperNumbers
+        ) = ticketV1.getTokenInfo(tokenIdOne);
         string memory ticketIdOneUri = ticketV1.tokenURI(tokenIdOne);
 
         assertEq(claimed, false);
@@ -66,21 +70,27 @@ contract TicketV1Test is StdCheats, Test {
         assertEq(uint256(gameDigits), uint256(GAME_DIGITS));
         assertEq(uint256(gameType), uint256(GAME_TYPE));
         assertEq(uint256(entryTier), uint256(GAME_ENTRY_TIER));
-        assertEq(number, NUMBER);
+        assertEq(abi.encodePacked(ticketLowerNumbers), abi.encodePacked(lowerNumbers));
+        assertEq(abi.encodePacked(ticketUpperNumbers), abi.encodePacked(upperNumbers));
         assertEq(ticketIdOneUri, URI);
 
-        uint8 secondNumber = 55;
         string memory secondUri = "test2";
+        uint8[] memory lowerNumbersTwo = new uint8[](1);
+        lowerNumbersTwo[0] = 33;
+        uint8[] memory upperNumbersTwo;
 
         vm.prank(engineProxyAddress);
-        uint256 tokenIdTwo =
-            ticketV1.safeMint(USER, ROUND, GAME_DIGITS, GAME_TYPE, GAME_ENTRY_TIER, secondNumber, secondUri);
+        uint256 tokenIdTwo = ticketV1.safeMint(
+            USER, ROUND, GAME_DIGITS, GAME_TYPE, GAME_ENTRY_TIER, lowerNumbersTwo, upperNumbersTwo, secondUri
+        );
 
-        (,,,,, uint8 numberTwo) = ticketV1.tokenInfo(tokenIdTwo);
+        (,,,,, uint8[] memory ticketLowerNumbersTwo, uint8[] memory ticketUpperNumbersTwo) =
+            ticketV1.getTokenInfo(tokenIdTwo);
         string memory ticketIdTwoUri = ticketV1.tokenURI(tokenIdTwo);
 
-        assertEq(numberTwo, secondNumber);
         assertEq(ticketIdTwoUri, secondUri);
+        assertEq(abi.encodePacked(ticketLowerNumbersTwo), abi.encodePacked(lowerNumbersTwo));
+        assertEq(abi.encodePacked(ticketUpperNumbersTwo), abi.encodePacked(upperNumbersTwo));
     }
 
     ////////////////////////////////////////
@@ -89,7 +99,8 @@ contract TicketV1Test is StdCheats, Test {
 
     function testTicketV1SetTicketClaimedRevertsNotMinterRole() public {
         vm.prank(engineProxyAddress);
-        uint256 tokenId = ticketV1.safeMint(USER, ROUND, GAME_DIGITS, GAME_TYPE, GAME_ENTRY_TIER, NUMBER, URI);
+        uint256 tokenId =
+            ticketV1.safeMint(USER, ROUND, GAME_DIGITS, GAME_TYPE, GAME_ENTRY_TIER, lowerNumbers, upperNumbers, URI);
 
         vm.expectRevert();
         ticketV1.setTicketClaimed(tokenId);
@@ -97,11 +108,12 @@ contract TicketV1Test is StdCheats, Test {
 
     function testTicketV1SetTicketClaimedWorks() public {
         vm.prank(engineProxyAddress);
-        uint256 tokenId = ticketV1.safeMint(USER, ROUND, GAME_DIGITS, GAME_TYPE, GAME_ENTRY_TIER, NUMBER, URI);
+        uint256 tokenId =
+            ticketV1.safeMint(USER, ROUND, GAME_DIGITS, GAME_TYPE, GAME_ENTRY_TIER, lowerNumbers, upperNumbers, URI);
 
         vm.prank(engineProxyAddress);
         ticketV1.setTicketClaimed(tokenId);
-        (bool claimed,,,,,) = ticketV1.tokenInfo(tokenId);
+        (bool claimed,,,,) = ticketV1.tokenInfo(tokenId);
         assertEq(claimed, true);
     }
 }

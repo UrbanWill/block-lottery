@@ -28,10 +28,11 @@ contract TicketV1 is
     struct TokenInfo {
         bool claimed;
         uint16 round;
-        DataTypesLib.GameDigits gameDigit;
+        DataTypesLib.GameDigits gameDigits;
         DataTypesLib.GameType gameType;
         DataTypesLib.GameEntryTier tier;
-        uint8 number;
+        uint8[] lowerNumbers;
+        uint8[] upperNumbers;
     }
 
     ////////////////////////////////////////
@@ -62,10 +63,11 @@ contract TicketV1 is
     function safeMint(
         address to,
         uint16 round,
-        DataTypesLib.GameDigits gameDigit,
+        DataTypesLib.GameDigits gameDigits,
         DataTypesLib.GameType gameType,
         DataTypesLib.GameEntryTier tier,
-        uint8 number,
+        uint8[] calldata lowerNumbers,
+        uint8[] calldata upperNumbers,
         string memory uri
     ) public onlyRole(MINTER_ROLE) returns (uint256) {
         uint256 tokenId = _nextTokenId++;
@@ -77,10 +79,11 @@ contract TicketV1 is
             TokenInfo({
                 claimed: false,
                 round: round,
-                gameDigit: gameDigit,
+                gameDigits: gameDigits,
                 gameType: gameType,
                 tier: tier,
-                number: number
+                lowerNumbers: lowerNumbers,
+                upperNumbers: upperNumbers
             })
         );
 
@@ -138,6 +141,28 @@ contract TicketV1 is
     ////////////////////////////////////////
     // Public & External View Functions   //
     ////////////////////////////////////////
+
+    /**
+     *
+     * @param tokenId Id of the token to get info for
+     */
+    function getTokenInfo(uint256 tokenId)
+        public
+        view
+        returns (
+            bool claimed,
+            uint16 round,
+            DataTypesLib.GameDigits gameDigits,
+            DataTypesLib.GameType gameType,
+            DataTypesLib.GameEntryTier tier,
+            uint8[] memory lowerNumbers,
+            uint8[] memory upperNumbers
+        )
+    {
+        TokenInfo memory info = tokenInfo[tokenId];
+        return
+            (info.claimed, info.round, info.gameDigits, info.gameType, info.tier, info.lowerNumbers, info.upperNumbers);
+    }
 
     function version() public pure returns (uint8) {
         return 1;

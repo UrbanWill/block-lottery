@@ -58,11 +58,13 @@ contract DeployAndUpgradeTest is StdCheats, Test {
         DataTypesLib.GameDigits gameDigits = DataTypesLib.GameDigits.Two;
         DataTypesLib.GameType gameType = DataTypesLib.GameType.Lower;
         DataTypesLib.GameEntryTier entryTier = DataTypesLib.GameEntryTier.One;
-        uint8 number = 1;
+        uint8[] memory lowerNumbers = new uint8[](1);
+        lowerNumbers[0] = 33;
+        uint8[] memory upperNumbers;
         string memory uri = "test";
 
         vm.prank(engineProxyAddress);
-        ticketV1.safeMint(USER, round, gameDigits, gameType, entryTier, number, uri);
+        ticketV1.safeMint(USER, round, gameDigits, gameType, entryTier, lowerNumbers, upperNumbers, uri);
         vm.expectRevert();
         TicketV2(ticketProxyAddress).updateTokenInfo(0, true);
     }
