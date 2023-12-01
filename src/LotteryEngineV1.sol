@@ -316,8 +316,10 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             DataTypesLib.GameDigits digits,
             DataTypesLib.GameType gameType,
             DataTypesLib.GameEntryTier tier,
-            uint8 number
-        ) = TicketV1(s_ticketAddress).tokenInfo(tokenId);
+            uint8 number,
+            bool isWinner,
+            uint256 ticketTierPayout
+        ) = getTicketInfo(tokenId);
         DataTypesLib.RoundStatus storage roundStats = s_roundStats[round];
 
         if (roundStats.status != DataTypesLib.GameStatus.Claimable || roundStats.clamableAt > block.timestamp) {
@@ -326,41 +328,17 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         if (msg.sender != TicketV1(s_ticketAddress).ownerOf(tokenId)) {
             revert LotteryEngine__OnlyTicketOwnerCanClaimWinnings();
         }
-
         if (claimed) {
             revert LotteryEngine__TicketAlreadyClaimed();
-        }
-
-        // TODO: Move is winner check to its own function
-        bool isWinner = false;
-
-        if (gameType == DataTypesLib.GameType.Reverse) {
-            if (number == reverseTwoDigitUint8(roundStats.lowerWinner)) {
-                isWinner = true;
-            }
-        } else if (gameType == DataTypesLib.GameType.Upper) {
-            if (number == roundStats.upperWinner) {
-                isWinner = true;
-            }
-        } else if (gameType == DataTypesLib.GameType.UpperReverse) {
-            if (number == reverseTwoDigitUint8(roundStats.upperWinner)) {
-                isWinner = true;
-            }
-        }
-        // Every game is a lower game by default
-        if (number == roundStats.lowerWinner) {
-            isWinner = true;
         }
 
         if (isWinner) {
             roundStats.twoDigitStatsPerTier[tier].winnersClaimedCount++;
             _closeRound(round);
-
             TicketV1(s_ticketAddress).setTicketClaimed(tokenId);
-            uint256 winnings = getGameTokenAmountFee(digits, tier) * getPayoutFactor();
-            payable(msg.sender).transfer(winnings);
+            payable(msg.sender).transfer(ticketTierPayout);
 
-            emit TicketClaimed(round, digits, gameType, tier, number, tokenId, winnings, msg.sender);
+            emit TicketClaimed(round, digits, gameType, tier, number, tokenId, ticketTierPayout, msg.sender);
         }
     }
 
@@ -683,10 +661,75 @@ contract LotteryEngineV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     /**
+     * @param digits Digits of the game, currently only 2 digits is supported
+     * @param tier Tier of the game, maps to the entry fee
+     * @return Payout amount in WEI for a given tier
+     */
+    function getPayoutPerTier(DataTypesLib.GameDigits digits, DataTypesLib.GameEntryTier tier)
+        public
+        view
+        returns (uint256)
+    {
+        return getGameTokenAmountFee(digits, tier) * getPayoutFactor();
+    }
+
+    /**
      * @return Payout factor for the game
      */
     function getPayoutFactor() public view returns (uint8) {
         return s_payoutFactor;
+    }
+
+    /**
+     * @param tokenId Token ID of the ticket
+     * @return claimed, round, digits, gameType, tier, number, isWinner, ticketTierPayout value in WEI
+     */
+    function getTicketInfo(uint256 tokenId)
+        public
+        view
+        returns (
+            bool,
+            uint16,
+            DataTypesLib.GameDigits,
+            DataTypesLib.GameType,
+            DataTypesLib.GameEntryTier,
+            uint8,
+            bool,
+            uint256
+        )
+    {
+        (
+            bool claimed,
+            uint16 round,
+            DataTypesLib.GameDigits digits,
+            DataTypesLib.GameType gameType,
+            DataTypesLib.GameEntryTier tier,
+            uint8 number
+        ) = TicketV1(s_ticketAddress).tokenInfo(tokenId);
+        DataTypesLib.RoundStatus storage roundStats = s_roundStats[round];
+        bool isWinner = false;
+
+        if (gameType == DataTypesLib.GameType.Reverse) {
+            if (number == reverseTwoDigitUint8(roundStats.lowerWinner)) {
+                isWinner = true;
+            }
+        } else if (gameType == DataTypesLib.GameType.Upper) {
+            if (number == roundStats.upperWinner) {
+                isWinner = true;
+            }
+        } else if (gameType == DataTypesLib.GameType.UpperReverse) {
+            if (number == reverseTwoDigitUint8(roundStats.upperWinner)) {
+                isWinner = true;
+            }
+        }
+        // Every game is a lower game by default
+        if (number == roundStats.lowerWinner) {
+            isWinner = true;
+        }
+
+        uint256 ticketTierPayout = getPayoutPerTier(digits, tier);
+
+        return (claimed, round, digits, gameType, tier, number, isWinner, ticketTierPayout);
     }
 
     /**
