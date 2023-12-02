@@ -56,7 +56,8 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
         DataTypesLib.GameDigits digits,
         DataTypesLib.GameType indexed gameType,
         DataTypesLib.GameEntryTier indexed tier,
-        uint8 number,
+        uint8[] lowerNumbers,
+        uint8[] upperNumbers,
         address player
     );
     event TicketClaimed(
@@ -64,7 +65,6 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
         DataTypesLib.GameDigits digits,
         DataTypesLib.GameType indexed gameType,
         DataTypesLib.GameEntryTier indexed tier,
-        uint8 number,
         uint256 tokenId,
         uint256 winnings,
         address player
@@ -80,6 +80,27 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
     modifier createNewRound() {
         vm.prank(LotteryEngineV1(engineProxyAddress).owner());
         lotteryEngineV1.createRound();
+        _;
+    }
+
+    modifier buyNewTwoDigitsTicket() {
+        uint8[] memory lowerNumbers = new uint8[](2);
+        lowerNumbers[0] = 33;
+        lowerNumbers[1] = 42;
+        uint8[] memory upperNumbers = new uint8[](1);
+        upperNumbers[0] = 50;
+        uint16 round = 1;
+        DataTypesLib.GameEntryTier tier = DataTypesLib.GameEntryTier.One;
+
+        uint256 totalNumbersCount = lowerNumbers.length + upperNumbers.length;
+        uint256 tierFee = lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, tier);
+        uint256 gameFee = tierFee * totalNumbersCount;
+
+        vm.prank(USER);
+        lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(
+            round, DataTypesLib.GameType.Lower, tier, lowerNumbers, upperNumbers, PUG_URI
+        );
+
         _;
     }
     ////////////////////////////////////////
@@ -214,7 +235,7 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
 
         vm.expectEmit(true, true, false, false, engineProxyAddress);
         emit RoundResultsPosted(round, lowerWinner, upperWinner, block.timestamp);
-        vm.expectEmit(true, true, false, false, engineProxyAddress);
+        vm.expectEmit(true, false, false, false, engineProxyAddress);
         emit RoundClosed(round, expectedWinners, expectedClaimed, block.timestamp);
         lotteryEngineV1.postRoundResults(lowerWinner, upperWinner);
         vm.stopPrank();
@@ -229,7 +250,11 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
         assertEq(claimableAt, expectedClaimableAt);
     }
 
-    function testLEV1PostRoundResultsRoundIsClaimableWhenThereAreWinners() public createNewRound buyTwoDigitsTicket {
+    function testLEV1PostRoundResultsRoundIsClaimableWhenThereAreWinners()
+        public
+        createNewRound
+        buyNewTwoDigitsTicket
+    {
         uint8 lowerWinner = 33;
         uint8 upperWinner = 98;
 
@@ -344,7 +369,7 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
     function testLEV1AmendRoundResultsUpdatesRoundToClaimableWhenThereIsAWinner()
         public
         createNewRound
-        buyTwoDigitsTicket
+        buyNewTwoDigitsTicket
     {
         uint8 lowerWinner = 99;
         uint8 upperWinner = 98;
@@ -457,18 +482,9 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
         lotteryEngineV1.withdraw(LOTTERY_OWNER, 1 ether);
     }
 
-    function testLEV1WithdrawRevertsWhenAmountBiggerThanDebt() public createNewRound buyTwoDigitsTicket {
-        uint8 number = 99;
-        uint16 round = 1;
-        DataTypesLib.GameEntryTier tier = DataTypesLib.GameEntryTier.One;
-        uint256 gameFee = lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, tier);
-
-        uint8 lowerWinner = 99;
+    function testLEV1WithdrawRevertsWhenAmountBiggerThanDebt() public createNewRound buyNewTwoDigitsTicket {
+        uint8 lowerWinner = 33; // Winning number
         uint8 upperWinner = 98;
-
-        vm.prank(USER);
-        lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(round, DataTypesLib.GameType.Lower, tier, number, PUG_URI);
-
         uint256 lotteryEngineBalance = address(engineProxyAddress).balance;
 
         vm.startPrank(LotteryEngineV1(engineProxyAddress).owner());
@@ -487,17 +503,9 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
         lotteryEngineV1.withdraw(LOTTERY_OWNER, 1 ether);
     }
 
-    function testLEV1WithdrawWorks() public createNewRound buyTwoDigitsTicket {
-        uint8 number = 99;
-        uint16 round = 1;
-        DataTypesLib.GameEntryTier tier = DataTypesLib.GameEntryTier.One;
-        uint256 gameFee = lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, tier);
-
+    function testLEV1WithdrawWorks() public createNewRound buyNewTwoDigitsTicket {
         uint8 lowerWinner = 99;
         uint8 upperWinner = 98;
-
-        vm.prank(USER);
-        lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(round, DataTypesLib.GameType.Lower, tier, number, PUG_URI);
 
         vm.startPrank(LotteryEngineV1(engineProxyAddress).owner());
         lotteryEngineV1.pauseRound();
@@ -516,153 +524,132 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
     }
 
     ////////////////////////////////////////
-    // buyTwoDigits Tests                 //
+    // buyTwoDigitsTicket Tests           //
     ////////////////////////////////////////
 
     function testLEV1BuyTwoDigitsRevertsWhenRoundIsNotOpen() public {
-        vm.expectRevert(LotteryEngineV1.LotteryEngine__RoundMustBeOpen.selector);
         uint16 round = 1;
-        uint8 number = 33;
-        lotteryEngineV1.buyTwoDigitsTicket(
-            round, DataTypesLib.GameType.Lower, DataTypesLib.GameEntryTier.One, number, PUG_URI
+        uint8[] memory lowerNumbers;
+        uint8[] memory upperNumbers = new uint8[](1);
+        upperNumbers[0] = 50;
+
+        vm.prank(USER);
+        vm.expectRevert(LotteryEngineV1.LotteryEngine__RoundMustBeOpen.selector);
+        lotteryEngineV1.buyTwoDigitsTicket{value: 3 ether}(
+            round, DataTypesLib.GameType.Lower, DataTypesLib.GameEntryTier.One, lowerNumbers, upperNumbers, PUG_URI
         );
     }
 
     function testLEV1BuyTwoDigitsRevertsWhenRoundIsPaused() public createNewRound {
         uint16 round = 1;
-        uint8 number = 33;
+        uint8[] memory lowerNumbers;
+        uint8[] memory upperNumbers;
 
         vm.prank(LotteryEngineV1(engineProxyAddress).owner());
         lotteryEngineV1.pauseRound();
         vm.expectRevert(LotteryEngineV1.LotteryEngine__RoundMustBeOpen.selector);
-        lotteryEngineV1.buyTwoDigitsTicket(
-            round, DataTypesLib.GameType.Lower, DataTypesLib.GameEntryTier.One, number, PUG_URI
+        lotteryEngineV1.buyTwoDigitsTicket{value: 3 ether}(
+            round, DataTypesLib.GameType.Lower, DataTypesLib.GameEntryTier.One, lowerNumbers, upperNumbers, PUG_URI
         );
     }
 
-    function testLEV1BuyTwoDigitsRevertsWhenTierFeeIsIncorrect(uint256 _tier, uint8 number) public createNewRound {
-        number = uint8(bound(number, 1, 99));
+    function testLEV1BuyTwoDigitsRevertsWhenTierFeeIsIncorrect(uint256 _tier) public createNewRound {
         _tier = bound(_tier, 0, 2);
+
+        uint8[] memory lowerNumbers;
+        uint8[] memory upperNumbers;
+        uint16 round = 1;
         DataTypesLib.GameEntryTier tier = DataTypesLib.GameEntryTier(_tier);
 
-        uint16 round = 1;
-        uint256 gameFee = lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, tier);
-        uint256 incorrectAmount = gameFee + 1 wei;
+        uint256 totalNumbersCount = lowerNumbers.length + upperNumbers.length;
+        uint256 tierFee = lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, tier);
+        uint256 gameFee = tierFee * totalNumbersCount;
+        uint256 incorrectAmount = gameFee + 1;
+
         vm.expectRevert(LotteryEngineV1.LotteryEngine__IncorrectTierFee.selector);
         lotteryEngineV1.buyTwoDigitsTicket{value: incorrectAmount}(
-            round, DataTypesLib.GameType.Upper, tier, number, PUG_URI
+            round, DataTypesLib.GameType.Lower, tier, lowerNumbers, upperNumbers, PUG_URI
         );
     }
 
-    function testLEV1BuyTwoDigitsRevertIfGameDigitsIsTwoAndNumberIsOutOfRange(uint8 numberAboveRange)
-        public
-        createNewRound
-    {
-        numberAboveRange = uint8(bound(numberAboveRange, 100, 255));
-        uint16 round = 1;
-        uint8 numberBelowRange = 0;
-        uint256 gameFee = lotteryEngineV1.getGameFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One);
+    // function testLEV1BuyTwoDigitsRevertIfGameDigitsIsTwoAndNumberIsOutOfRange(uint8 numberAboveRange)
+    //     public
+    //     createNewRound
+    // {
+    //     numberAboveRange = uint8(bound(numberAboveRange, 100, 255));
+    //     uint16 round = 1;
+    //     uint8 numberBelowRange = 0;
+    //     uint256 gameFee = lotteryEngineV1.getGameFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One);
 
-        vm.expectRevert(LotteryEngineV1.LotteryEngine__NumberOutOfRange.selector);
-        lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(
-            round, DataTypesLib.GameType.Reverse, DataTypesLib.GameEntryTier.One, numberAboveRange, PUG_URI
-        );
-        vm.expectRevert(LotteryEngineV1.LotteryEngine__NumberOutOfRange.selector);
-        lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(
-            round, DataTypesLib.GameType.Reverse, DataTypesLib.GameEntryTier.One, numberBelowRange, PUG_URI
-        );
-    }
+    //     vm.expectRevert(LotteryEngineV1.LotteryEngine__NumberOutOfRange.selector);
+    //     lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(
+    //         round, DataTypesLib.GameType.Reverse, DataTypesLib.GameEntryTier.One, numberAboveRange, PUG_URI
+    //     );
+    //     vm.expectRevert(LotteryEngineV1.LotteryEngine__NumberOutOfRange.selector);
+    //     lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(
+    //         round, DataTypesLib.GameType.Reverse, DataTypesLib.GameEntryTier.One, numberBelowRange, PUG_URI
+    //     );
+    // }
 
-    // TODO: Split this test into multiple tests, "Reverse" game types and "Regular" game types
-    function testLEV1BuyTwoDigitsUpdatesRoundStatsAndEmits(uint256 _gameType, uint256 _tier, uint256 number)
-        public
-        createNewRound
-    {
+    function testLEV1BuyTwoDigitsUpdatesRoundStatsAndEmits(uint256 _gameType, uint256 _tier) public createNewRound {
         _tier = bound(_tier, 0, 2);
-        _gameType = bound(_gameType, 0, 3);
-        number = bound(number, 1, 99);
+        _gameType = bound(_gameType, 0, 1);
 
         uint16 round = 1;
-        uint256 expectedTicketSold = 1;
+        uint8 firstNumber = 33;
+        uint8 secondNumber = 34;
         uint256 expectedNumberSold = 1;
+        uint8[] memory lowerNumbers = new uint8[](2);
+        lowerNumbers[0] = firstNumber;
+        lowerNumbers[1] = secondNumber;
+        uint8[] memory upperNumbers = new uint8[](2);
+        upperNumbers[0] = firstNumber;
+        upperNumbers[1] = secondNumber;
+
         DataTypesLib.GameType gameType = DataTypesLib.GameType(_gameType);
         DataTypesLib.GameEntryTier tier = DataTypesLib.GameEntryTier(_tier);
-        uint256 gameFee = lotteryEngineV1.calculateTwoDigitsTicketFee(DataTypesLib.GameDigits.Two, gameType, tier);
+
+        uint256 totalNumbersCount = lowerNumbers.length + upperNumbers.length;
+        uint256 tierFee = lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, tier);
+        uint256 gameFee = tierFee * totalNumbersCount;
+
         uint256 initialBalance = address(engineProxyAddress).balance;
         uint256 expectedBalance = initialBalance + gameFee;
 
-        if (gameType == DataTypesLib.GameType.Upper || gameType == DataTypesLib.GameType.Reverse) {
-            expectedTicketSold = 2;
-        } else if (gameType == DataTypesLib.GameType.UpperReverse) {
-            expectedTicketSold = 4;
-        }
-
-        if (gameType == DataTypesLib.GameType.Reverse || gameType == DataTypesLib.GameType.UpperReverse) {
-            uint8 reversedNumber = lotteryEngineV1.reverseTwoDigitUint8(uint8(number));
-            if (reversedNumber == number) {
-                expectedNumberSold = expectedNumberSold * 2;
-            }
-        }
-
         vm.prank(USER);
         vm.expectEmit(true, true, true, true, engineProxyAddress);
-        emit TicketBought(round, DataTypesLib.GameDigits.Two, gameType, tier, uint8(number), USER);
-        lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(round, gameType, tier, uint8(number), PUG_URI);
+        emit TicketBought(round, DataTypesLib.GameDigits.Two, gameType, tier, lowerNumbers, upperNumbers, USER);
+        lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(round, gameType, tier, lowerNumbers, upperNumbers, PUG_URI);
 
-        assertEq(lotteryEngineV1.getTierTicketCountSoldPerRound(round, tier), expectedTicketSold);
+        assertEq(lotteryEngineV1.getTierTicketCountSoldPerRound(round, tier), totalNumbersCount);
+        assertEq(lotteryEngineV1.getTwoDigitsNumberCountPerType(round, gameType, tier, firstNumber), expectedNumberSold);
         assertEq(
-            lotteryEngineV1.getTwoDigitsNumberCountPerType(round, gameType, tier, uint8(number)), expectedNumberSold
+            lotteryEngineV1.getTwoDigitsNumberCountPerType(round, gameType, tier, secondNumber), expectedNumberSold
         );
         assertEq(address(engineProxyAddress).balance, expectedBalance);
     }
 
-    function testLEV1BuyTwoDigitsOnlyUpdatesCorrectRoundStats(uint256 number) public createNewRound {
-        number = bound(number, 1, 99);
-
-        uint256 expectedTicketSold = 0;
-        uint16 round = 1;
-        uint256 gameFee =
-            lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One);
-
-        vm.prank(USER);
-        lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(
-            round, DataTypesLib.GameType.Lower, DataTypesLib.GameEntryTier.One, uint8(number), PUG_URI
-        );
-
-        assertEq(
-            lotteryEngineV1.getTierTicketCountSoldPerRound(round, DataTypesLib.GameEntryTier.Two), expectedTicketSold
-        );
-        assertEq(
-            lotteryEngineV1.getTierTicketCountSoldPerRound(round, DataTypesLib.GameEntryTier.Three), expectedTicketSold
-        );
-
-        assertEq(
-            lotteryEngineV1.getTwoDigitsNumberCountPerType(
-                round, DataTypesLib.GameType.Reverse, DataTypesLib.GameEntryTier.Two, uint8(number)
-            ),
-            expectedTicketSold
-        );
-
-        assertEq(
-            lotteryEngineV1.getTwoDigitsNumberCountPerType(
-                round, DataTypesLib.GameType.Reverse, DataTypesLib.GameEntryTier.Three, uint8(number)
-            ),
-            expectedTicketSold
-        );
-    }
-
-    function testLEV1BuyTwoDigitsMintsNft(uint256 _gameType, uint256 _tier, uint256 number) public createNewRound {
+    function testLEV1BuyTwoDigitsMintsNft(
+        uint256 _gameType,
+        uint256 _tier,
+        uint8[] calldata lowerNumbers,
+        uint8[] calldata upperNumbers
+    ) public createNewRound {
         _tier = bound(_tier, 0, 2);
-        _gameType = bound(_gameType, 0, 3);
-        number = bound(number, 1, 99);
+        _gameType = bound(_gameType, 0, 1);
+        vm.assume(upperNumbers.length < 99);
+        vm.assume(lowerNumbers.length < 99);
 
+        uint256 totalNumbersCount = lowerNumbers.length + upperNumbers.length;
         uint16 round = 1;
         DataTypesLib.GameType gameType = DataTypesLib.GameType(_gameType);
         DataTypesLib.GameEntryTier tier = DataTypesLib.GameEntryTier(_tier);
-        uint256 gameFee = lotteryEngineV1.calculateTwoDigitsTicketFee(DataTypesLib.GameDigits.Two, gameType, tier);
+        uint256 tierFee = lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, tier);
+        uint256 gameFee = tierFee * totalNumbersCount;
+
         startMeasuringGas("buyTicket gas:");
         vm.prank(USER);
-        lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(round, gameType, tier, uint8(number), PUG_URI);
+        lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(round, gameType, tier, lowerNumbers, upperNumbers, PUG_URI);
         stopMeasuringGas();
 
         assertEq(ticketV1.ownerOf(0), USER);
@@ -671,25 +658,22 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
     // claimWinnings Tests                //
     ////////////////////////////////////////
 
-    modifier buyTwoDigitsTicket() {
-        uint8 number = 33;
-        uint16 round = 1;
-        DataTypesLib.GameEntryTier tier = DataTypesLib.GameEntryTier.One;
-        uint256 gameFee = lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, tier);
-
-        vm.prank(USER);
-        lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(round, DataTypesLib.GameType.Lower, tier, number, PUG_URI);
-
-        _;
-    }
-
     function testLEV1ClaimWinningsRevertsWhenRoundIsNotClaimable() public createNewRound {
         uint256 tokenId = 1;
+        uint8 lowerWinner = 33;
+        uint8 upperWinner = 98;
+
+        vm.startPrank(LotteryEngineV1(engineProxyAddress).owner());
+        lotteryEngineV1.pauseRound();
+        lotteryEngineV1.postRoundResults(lowerWinner, upperWinner);
+        vm.stopPrank();
+
+        vm.warp(59 minutes);
         vm.expectRevert(LotteryEngineV1.LotteryEngine__RoundMustBeClaimable.selector);
         lotteryEngineV1.claimWinnings(tokenId);
     }
 
-    function testLEV1ClaimWinningsRevertsWhenNotTicketOwner() public createNewRound buyTwoDigitsTicket {
+    function testLEV1ClaimWinningsRevertsWhenNotTicketOwner() public createNewRound buyNewTwoDigitsTicket {
         uint256 tokenId = 0;
         uint8 lowerWinner = 33;
         uint8 upperWinner = 98;
@@ -705,19 +689,27 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
         lotteryEngineV1.claimWinnings(tokenId);
     }
 
-    function testLEV1ClaimWinningsRevertsWhenTicketAlreadyClaimed() public createNewRound buyTwoDigitsTicket {
+    function testLEV1ClaimWinningsRevertsWhenTicketAlreadyClaimed() public createNewRound buyNewTwoDigitsTicket {
         uint256 tokenId = 0;
         uint8 lowerWinner = 33;
         uint8 upperWinner = 98;
 
         // Buys one more winning ticket to prevent the round from closing when the only winner claims their ticket
+        uint8[] memory lowerNumbers = new uint8[](2);
+        lowerNumbers[0] = 33;
+        lowerNumbers[1] = 42;
+        uint8[] memory upperNumbers = new uint8[](1);
+        upperNumbers[0] = 50;
         uint16 round = 1;
-        uint256 gameFee =
-            lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One) * 2;
+        DataTypesLib.GameEntryTier tier = DataTypesLib.GameEntryTier.One;
+
+        uint256 totalNumbersCount = lowerNumbers.length + upperNumbers.length;
+        uint256 tierFee = lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, tier);
+        uint256 gameFee = tierFee * totalNumbersCount;
 
         vm.prank(USER);
         lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(
-            round, DataTypesLib.GameType.Upper, DataTypesLib.GameEntryTier.One, uint8(upperWinner), PUG_URI
+            round, DataTypesLib.GameType.Lower, tier, lowerNumbers, upperNumbers, PUG_URI
         );
 
         vm.startPrank(LotteryEngineV1(engineProxyAddress).owner());
@@ -734,11 +726,35 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
         vm.stopPrank();
     }
 
-    function testLEV1ClaimWinningsClosesRoundWhenLastWinnerClaims() public createNewRound buyTwoDigitsTicket {
+    function testLEV1ClaimWinningsClosesAndEmiitsRoundWhenLastWinnerClaims()
+        public
+        createNewRound
+        buyNewTwoDigitsTicket
+    {
         uint256 tokenId = 0;
         uint8 lowerWinner = 33;
-        uint8 upperWinner = 98;
+        uint8 upperWinner = 50;
         DataTypesLib.GameStatus expectedStatus = DataTypesLib.GameStatus.Closed;
+        uint16 winnersCount = 3;
+        uint16 claimedCount = 3;
+
+        // Buys one more winning ticket
+        uint8[] memory lowerNumbers = new uint8[](2);
+        lowerNumbers[0] = 37;
+        lowerNumbers[1] = 42;
+        uint8[] memory upperNumbers = new uint8[](1);
+        upperNumbers[0] = upperWinner;
+        uint16 round = 1;
+        DataTypesLib.GameEntryTier tier = DataTypesLib.GameEntryTier.Three;
+
+        uint256 totalNumbersCount = lowerNumbers.length + upperNumbers.length;
+        uint256 tierFee = lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, tier);
+        uint256 gameFee = tierFee * totalNumbersCount;
+
+        vm.prank(USER);
+        uint256 tokenIdTwo = lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(
+            round, DataTypesLib.GameType.Lower, tier, lowerNumbers, upperNumbers, PUG_URI
+        );
 
         vm.startPrank(LotteryEngineV1(engineProxyAddress).owner());
         lotteryEngineV1.pauseRound();
@@ -749,12 +765,18 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
         vm.startPrank(USER);
         lotteryEngineV1.claimWinnings(tokenId);
 
+        vm.warp(2 hours);
+        vm.startPrank(USER);
+        vm.expectEmit(true, true, false, false, engineProxyAddress);
+        emit RoundClosed(round, winnersCount, claimedCount, block.timestamp);
+        lotteryEngineV1.claimWinnings(tokenIdTwo);
+
         (DataTypesLib.GameStatus status,,,,) = lotteryEngineV1.getRoundInfo(1);
 
         assertEq(uint256(status), uint256(expectedStatus));
     }
 
-    function testLEV1ClaimWinningsUpdatesWinnersClaimedCount() public createNewRound buyTwoDigitsTicket {
+    function testLEV1ClaimWinningsUpdatesWinnersClaimedCount() public createNewRound buyNewTwoDigitsTicket {
         uint16 round = 1;
         DataTypesLib.GameEntryTier tier = DataTypesLib.GameEntryTier.One;
         uint256 tokenId = 0;
@@ -775,7 +797,8 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
         assertEq(lotteryEngineV1.getTierWinnersClaimedPerRound(round, tier), expectedWinnersClaimedCount);
     }
 
-    function testLEV1ClaimWinningsPaysAndEmits() public createNewRound buyTwoDigitsTicket {
+    function testLEV1ClaimWinningsPaysAndEmits() public createNewRound buyNewTwoDigitsTicket {
+        uint16 round = 1;
         uint256 tokenId = 0;
         uint8 lowerWinner = 33;
         uint8 upperWinner = 98;
@@ -791,13 +814,13 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
 
         vm.warp(61 minutes);
         vm.startPrank(USER);
-        vm.expectEmit(true, true, false, false, engineProxyAddress);
+        vm.expectEmit(true, true, false, true, engineProxyAddress);
+
         emit TicketClaimed(
-            1,
+            round,
             DataTypesLib.GameDigits.Two,
             DataTypesLib.GameType.Lower,
             DataTypesLib.GameEntryTier.One,
-            lowerWinner,
             tokenId,
             expectedWinnings,
             USER
@@ -808,18 +831,25 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
         assertEq(address(USER).balance, expectedBalance);
     }
 
-    function testLEV1ClaimWinningsDoesNotPayWhenNotWinner() public createNewRound buyTwoDigitsTicket {
+    function testLEV1ClaimWinningsDoesNotPayWhenNotWinner() public createNewRound buyNewTwoDigitsTicket {
         uint8 lowerWinner = 33;
         uint8 upperWinner = 98;
 
-        uint8 number = 24;
         uint16 round = 1;
-        DataTypesLib.GameEntryTier tier = DataTypesLib.GameEntryTier.One;
-        uint256 gameFee = lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, tier);
+        // Buys a ticket that is not a winner
+        uint8[] memory lowerNumbers = new uint8[](2);
+        lowerNumbers[0] = 37;
+        lowerNumbers[1] = 42;
+        uint8[] memory upperNumbers;
+        DataTypesLib.GameEntryTier tier = DataTypesLib.GameEntryTier.Three;
+
+        uint256 totalNumbersCount = lowerNumbers.length + upperNumbers.length;
+        uint256 tierFee = lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, tier);
+        uint256 gameFee = tierFee * totalNumbersCount;
 
         vm.prank(USER);
         uint256 loserTokenId = lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(
-            round, DataTypesLib.GameType.Lower, tier, number, PUG_URI
+            round, DataTypesLib.GameType.Lower, tier, lowerNumbers, upperNumbers, PUG_URI
         );
 
         uint256 expectedBalance = address(USER).balance;
@@ -836,6 +866,7 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
 
         assertEq(address(USER).balance, expectedBalance);
     }
+
     ////////////////////////////////////////
     // Price Tests                        //
     ////////////////////////////////////////
@@ -909,29 +940,6 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
         assertEq(actual, expectedUsd);
     }
 
-    function testLEV1CalculateTwoDigitsTicketFee() public {
-        uint256 expectedLowerFee =
-            lotteryEngineV1.getGameFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One) / ethUsdOraclePrice;
-
-        uint256 actualLowerFee = lotteryEngineV1.calculateTwoDigitsTicketFee(
-            DataTypesLib.GameDigits.Two, DataTypesLib.GameType.Lower, DataTypesLib.GameEntryTier.One
-        );
-        uint256 actualUpperFee = lotteryEngineV1.calculateTwoDigitsTicketFee(
-            DataTypesLib.GameDigits.Two, DataTypesLib.GameType.Upper, DataTypesLib.GameEntryTier.One
-        );
-        uint256 actualReverseFee = lotteryEngineV1.calculateTwoDigitsTicketFee(
-            DataTypesLib.GameDigits.Two, DataTypesLib.GameType.Upper, DataTypesLib.GameEntryTier.One
-        );
-        uint256 actualUpperReverseFee = lotteryEngineV1.calculateTwoDigitsTicketFee(
-            DataTypesLib.GameDigits.Two, DataTypesLib.GameType.UpperReverse, DataTypesLib.GameEntryTier.One
-        );
-
-        assertEq(actualLowerFee, expectedLowerFee);
-        assertEq(actualUpperFee, expectedLowerFee * 2);
-        assertEq(actualReverseFee, expectedLowerFee * 2);
-        assertEq(actualUpperReverseFee, expectedLowerFee * 4);
-    }
-
     ////////////////////////////////////////
     // View & Pure functions tests        //
     ////////////////////////////////////////
@@ -964,79 +972,35 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
         assertEq(claimableAt, expectedClaimableAt);
     }
 
-    function testLEV1GetTierTicketCountSoldPerRound() public createNewRound {
-        uint16 round = 1;
-        uint8 number = 33;
-        uint256 expectedTierOneTicketsSold = 2;
-        uint256 expectedTierTwoTicketsSold = 1;
-        uint256 expectedTierThreeTicketsSold = 3;
-        DataTypesLib.GameType gameType = DataTypesLib.GameType.Lower;
-
-        uint256 tierOneGameFee =
-            lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One);
-        uint256 tierTwoGameFee =
-            lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Two);
-        uint256 tierThreeGameFee =
-            lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Three);
-
-        vm.startPrank(USER);
-        // Buys 2 tier One tickets
-        lotteryEngineV1.buyTwoDigitsTicket{value: tierOneGameFee}(
-            round, gameType, DataTypesLib.GameEntryTier.One, number, PUG_URI
-        );
-        lotteryEngineV1.buyTwoDigitsTicket{value: tierOneGameFee}(
-            round, gameType, DataTypesLib.GameEntryTier.One, number, PUG_URI
-        );
-        // Buys 1 tier Two ticket
-        lotteryEngineV1.buyTwoDigitsTicket{value: tierTwoGameFee}(
-            round, gameType, DataTypesLib.GameEntryTier.Two, number, PUG_URI
-        );
-        // Buyst 3 tier Three tickets
-        lotteryEngineV1.buyTwoDigitsTicket{value: tierThreeGameFee}(
-            round, gameType, DataTypesLib.GameEntryTier.Three, number, PUG_URI
-        );
-        lotteryEngineV1.buyTwoDigitsTicket{value: tierThreeGameFee}(
-            round, gameType, DataTypesLib.GameEntryTier.Three, number, PUG_URI
-        );
-        lotteryEngineV1.buyTwoDigitsTicket{value: tierThreeGameFee}(
-            round, gameType, DataTypesLib.GameEntryTier.Three, number, PUG_URI
-        );
-        vm.stopPrank();
-
-        assertEq(
-            lotteryEngineV1.getTierTicketCountSoldPerRound(round, DataTypesLib.GameEntryTier.One),
-            expectedTierOneTicketsSold
-        );
-        assertEq(
-            lotteryEngineV1.getTierTicketCountSoldPerRound(round, DataTypesLib.GameEntryTier.Two),
-            expectedTierTwoTicketsSold
-        );
-        assertEq(
-            lotteryEngineV1.getTierTicketCountSoldPerRound(round, DataTypesLib.GameEntryTier.Three),
-            expectedTierThreeTicketsSold
-        );
-    }
-
     function testLEV1GetTierWinnersClaimedPerRound(uint256 _tier) public createNewRound {
         _tier = bound(_tier, 0, 2);
 
         uint16 round = 1;
         uint8 lowerWinner = 33;
         uint8 upperWinner = 98;
-        uint8 loweNumber = 33;
-        uint256 expectedWinnersClaimedCount = 3;
+        uint256 expectedWinnersClaimedCount = 4;
+
+        uint8[] memory lowerNumbers = new uint8[](2);
+        lowerNumbers[0] = lowerWinner;
+        lowerNumbers[1] = upperWinner;
+        uint8[] memory upperNumbers = new uint8[](2);
+        upperNumbers[0] = lowerWinner;
+        upperNumbers[1] = upperWinner;
 
         DataTypesLib.GameType gameType = DataTypesLib.GameType.Lower;
         DataTypesLib.GameEntryTier tier = DataTypesLib.GameEntryTier(_tier);
-        uint256 gameFee = lotteryEngineV1.calculateTwoDigitsTicketFee(DataTypesLib.GameDigits.Two, gameType, tier);
+
+        uint256 totalNumbersCount = lowerNumbers.length + upperNumbers.length;
+        uint256 tierFee = lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, tier);
+        uint256 gameFee = tierFee * totalNumbersCount;
 
         vm.startPrank(USER);
-        uint256 tokendIdOne =
-            lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(round, gameType, tier, uint8(loweNumber), PUG_URI);
-        uint256 tokendIdTwo =
-            lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(round, gameType, tier, uint8(loweNumber), PUG_URI);
-        uint256 tokendIdThree =
-            lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(round, gameType, tier, uint8(loweNumber), PUG_URI);
+        uint256 tokendIdOne = lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(
+            round, gameType, tier, lowerNumbers, upperNumbers, PUG_URI
+        );
+        uint256 tokendIdTwo = lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(
+            round, gameType, tier, lowerNumbers, upperNumbers, PUG_URI
+        );
         vm.stopPrank();
 
         vm.startPrank(LotteryEngineV1(engineProxyAddress).owner());
@@ -1049,36 +1013,39 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
         vm.startPrank(USER);
         lotteryEngineV1.claimWinnings(tokendIdOne);
         lotteryEngineV1.claimWinnings(tokendIdTwo);
-        lotteryEngineV1.claimWinnings(tokendIdThree);
         vm.stopPrank();
 
         assertEq(lotteryEngineV1.getTierWinnersClaimedPerRound(round, tier), expectedWinnersClaimedCount);
     }
 
-    function testLEV1getTotalWinnersClaimedPerRound() public createNewRound {
+    function testLEV1getTotalWinnersClaimedPerRound(uint256 _tier) public createNewRound {
+        _tier = bound(_tier, 0, 2);
+
         uint16 round = 1;
         uint8 lowerWinner = 33;
         uint8 upperWinner = 98;
-        uint8 loweNumber = 33;
-        uint256 expectedWinnersClaimedCount = 3;
+        uint256 expectedWinnersClaimedCount = 4;
+
+        uint8[] memory lowerNumbers = new uint8[](2);
+        lowerNumbers[0] = lowerWinner;
+        lowerNumbers[1] = upperWinner;
+        uint8[] memory upperNumbers = new uint8[](2);
+        upperNumbers[0] = lowerWinner;
+        upperNumbers[1] = upperWinner;
 
         DataTypesLib.GameType gameType = DataTypesLib.GameType.Lower;
-        uint256 tierOneGameFee =
-            lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One);
-        uint256 tierTwoGameFee =
-            lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Two);
-        uint256 tierThreeGameFee =
-            lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Three);
+        DataTypesLib.GameEntryTier tier = DataTypesLib.GameEntryTier(_tier);
+
+        uint256 totalNumbersCount = lowerNumbers.length + upperNumbers.length;
+        uint256 tierFee = lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, tier);
+        uint256 gameFee = tierFee * totalNumbersCount;
 
         vm.startPrank(USER);
-        uint256 tokendIdOne = lotteryEngineV1.buyTwoDigitsTicket{value: tierOneGameFee}(
-            round, gameType, DataTypesLib.GameEntryTier.One, uint8(loweNumber), PUG_URI
+        uint256 tokendIdOne = lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(
+            round, gameType, tier, lowerNumbers, upperNumbers, PUG_URI
         );
-        uint256 tokendIdTwo = lotteryEngineV1.buyTwoDigitsTicket{value: tierTwoGameFee}(
-            round, gameType, DataTypesLib.GameEntryTier.Two, uint8(loweNumber), PUG_URI
-        );
-        uint256 tokendIdThree = lotteryEngineV1.buyTwoDigitsTicket{value: tierThreeGameFee}(
-            round, gameType, DataTypesLib.GameEntryTier.Three, uint8(loweNumber), PUG_URI
+        uint256 tokendIdTwo = lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(
+            round, gameType, tier, lowerNumbers, upperNumbers, PUG_URI
         );
         vm.stopPrank();
 
@@ -1092,44 +1059,9 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
         vm.startPrank(USER);
         lotteryEngineV1.claimWinnings(tokendIdOne);
         lotteryEngineV1.claimWinnings(tokendIdTwo);
-        lotteryEngineV1.claimWinnings(tokendIdThree);
         vm.stopPrank();
 
         assertEq(lotteryEngineV1.getTotalWinnersClaimedPerRound(round), expectedWinnersClaimedCount);
-    }
-
-    function testLEV1GetTwoDigitsNumberCountPerType(uint256 _gameType, uint256 _tier, uint256 number)
-        public
-        createNewRound
-    {
-        _tier = bound(_tier, 0, 2);
-        _gameType = bound(_gameType, 0, 3);
-        number = bound(number, 1, 99);
-
-        uint16 round = 1;
-        DataTypesLib.GameType gameType = DataTypesLib.GameType(_gameType);
-        DataTypesLib.GameEntryTier tier = DataTypesLib.GameEntryTier(_tier);
-        uint256 gameFee = lotteryEngineV1.calculateTwoDigitsTicketFee(DataTypesLib.GameDigits.Two, gameType, tier);
-
-        uint256 expectedNumberSold = 3;
-
-        // handles cases where number is the same as the reversed number, eg: single digit numbers or 11, 22, 33...
-        if (gameType == DataTypesLib.GameType.Reverse || gameType == DataTypesLib.GameType.UpperReverse) {
-            uint8 reversedNumber = lotteryEngineV1.reverseTwoDigitUint8(uint8(number));
-            if (reversedNumber == number) {
-                expectedNumberSold = expectedNumberSold * 2;
-            }
-        }
-
-        vm.startPrank(USER);
-        lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(round, gameType, tier, uint8(number), PUG_URI);
-        lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(round, gameType, tier, uint8(number), PUG_URI);
-        lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(round, gameType, tier, uint8(number), PUG_URI);
-        vm.stopPrank();
-
-        assertEq(
-            lotteryEngineV1.getTwoDigitsNumberCountPerType(round, gameType, tier, uint8(number)), expectedNumberSold
-        );
     }
 
     function testLEV1GetTierWinnerCountPerRound(uint256 _tier) public createNewRound {
@@ -1138,66 +1070,82 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
         uint16 round = 1;
         uint8 lowerWinner = 33;
         uint8 upperWinner = 98;
-        uint8 loweNumber = 33;
-        uint256 expectedWinnersCount = 3;
+        uint8[] memory lowerNumbers = new uint8[](2);
+        lowerNumbers[0] = lowerWinner;
+        lowerNumbers[1] = upperWinner;
+        uint8[] memory upperNumbers = new uint8[](2);
+        upperNumbers[0] = lowerWinner;
+        upperNumbers[1] = upperWinner;
+        uint256 totalNumbersCount = lowerNumbers.length + upperNumbers.length;
 
-        DataTypesLib.GameType gameType = DataTypesLib.GameType.Lower;
         DataTypesLib.GameEntryTier tier = DataTypesLib.GameEntryTier(_tier);
-        uint256 gameFee = lotteryEngineV1.calculateTwoDigitsTicketFee(DataTypesLib.GameDigits.Two, gameType, tier);
+        DataTypesLib.GameType gameType = DataTypesLib.GameType.Lower;
+        uint256 tierFee = lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, tier);
+        uint256 gameFee = tierFee * totalNumbersCount;
 
         vm.startPrank(USER);
-        lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(round, gameType, tier, uint8(loweNumber), PUG_URI);
-        lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(round, gameType, tier, uint8(loweNumber), PUG_URI);
-        lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(round, gameType, tier, uint8(loweNumber), PUG_URI);
+        lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(round, gameType, tier, lowerNumbers, upperNumbers, PUG_URI);
+        lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(round, gameType, tier, lowerNumbers, upperNumbers, PUG_URI);
+        lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(round, gameType, tier, lowerNumbers, upperNumbers, PUG_URI);
         vm.stopPrank();
 
         vm.startPrank(LotteryEngineV1(engineProxyAddress).owner());
         lotteryEngineV1.pauseRound();
         lotteryEngineV1.postRoundResults(lowerWinner, upperWinner);
         vm.stopPrank();
+
+        uint256 tierTicketCount = 3;
+        uint256 winnerNumbersPerTicket = 2;
+        uint256 expectedWinnersCount = tierTicketCount * winnerNumbersPerTicket;
 
         assertEq(lotteryEngineV1.getTierWinnerCountPerRound(round, tier), expectedWinnersCount);
     }
 
     function testLEV1GetTotalWinnersCountPerRound() public createNewRound {
         uint16 round = 1;
-        uint8 number = 33;
-        uint256 tierOneTicketCount = 2;
-        uint256 tierTwoTicketCount = 1;
-        uint256 tierThreeTicketCount = 3;
-        uint256 expectedWinnersCount = tierOneTicketCount + tierTwoTicketCount + tierThreeTicketCount;
-        DataTypesLib.GameType gameType = DataTypesLib.GameType.Lower;
         uint8 lowerWinner = 33;
         uint8 upperWinner = 98;
+        uint8[] memory lowerNumbers = new uint8[](2);
+        lowerNumbers[0] = lowerWinner;
+        lowerNumbers[1] = upperWinner;
+        uint8[] memory upperNumbers = new uint8[](2);
+        upperNumbers[0] = lowerWinner;
+        upperNumbers[1] = upperWinner;
+        uint256 totalNumbersCount = lowerNumbers.length + upperNumbers.length;
 
-        uint256 tierOneGameFee =
-            lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One);
-        uint256 tierTwoGameFee =
-            lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Two);
-        uint256 tierThreeGameFee =
-            lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Three);
+        DataTypesLib.GameType gameType = DataTypesLib.GameType.Lower;
+
+        uint256 tierOneGameFee = lotteryEngineV1.getGameTokenAmountFee(
+            DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One
+        ) * totalNumbersCount;
+        uint256 tierTwoGameFee = lotteryEngineV1.getGameTokenAmountFee(
+            DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Two
+        ) * totalNumbersCount;
+        uint256 tierThreeGameFee = lotteryEngineV1.getGameTokenAmountFee(
+            DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Three
+        ) * totalNumbersCount;
 
         vm.startPrank(USER);
         // Buys 2 tier One tickets
         lotteryEngineV1.buyTwoDigitsTicket{value: tierOneGameFee}(
-            round, gameType, DataTypesLib.GameEntryTier.One, number, PUG_URI
+            round, gameType, DataTypesLib.GameEntryTier.One, lowerNumbers, upperNumbers, PUG_URI
         );
         lotteryEngineV1.buyTwoDigitsTicket{value: tierOneGameFee}(
-            round, gameType, DataTypesLib.GameEntryTier.One, number, PUG_URI
+            round, gameType, DataTypesLib.GameEntryTier.One, lowerNumbers, upperNumbers, PUG_URI
         );
         // Buys 1 tier Two ticket
         lotteryEngineV1.buyTwoDigitsTicket{value: tierTwoGameFee}(
-            round, gameType, DataTypesLib.GameEntryTier.Two, number, PUG_URI
+            round, gameType, DataTypesLib.GameEntryTier.Two, lowerNumbers, upperNumbers, PUG_URI
         );
         // Buyst 3 tier Three tickets
         lotteryEngineV1.buyTwoDigitsTicket{value: tierThreeGameFee}(
-            round, gameType, DataTypesLib.GameEntryTier.Three, number, PUG_URI
+            round, gameType, DataTypesLib.GameEntryTier.Three, lowerNumbers, upperNumbers, PUG_URI
         );
         lotteryEngineV1.buyTwoDigitsTicket{value: tierThreeGameFee}(
-            round, gameType, DataTypesLib.GameEntryTier.Three, number, PUG_URI
+            round, gameType, DataTypesLib.GameEntryTier.Three, lowerNumbers, upperNumbers, PUG_URI
         );
         lotteryEngineV1.buyTwoDigitsTicket{value: tierThreeGameFee}(
-            round, gameType, DataTypesLib.GameEntryTier.Three, number, PUG_URI
+            round, gameType, DataTypesLib.GameEntryTier.Three, lowerNumbers, upperNumbers, PUG_URI
         );
         vm.stopPrank();
 
@@ -1205,53 +1153,61 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
         lotteryEngineV1.pauseRound();
         lotteryEngineV1.postRoundResults(lowerWinner, upperWinner);
         vm.stopPrank();
+
+        uint256 tierOneTicketCount = 2;
+        uint256 tierTwoTicketCount = 1;
+        uint256 tierThreeTicketCount = 3;
+        uint256 winnerNumbersPerTicket = 2;
+        uint256 expectedWinnersCount =
+            (tierOneTicketCount + tierTwoTicketCount + tierThreeTicketCount) * winnerNumbersPerTicket;
 
         assertEq(lotteryEngineV1.getTotalWinnersCountPerRound(round), expectedWinnersCount);
     }
 
     function testLEV1GetUnclaimedWinningsPerTierAndRound() public createNewRound {
         uint16 round = 1;
-        uint8 number = 33;
-        uint256 unclaimedTierOneTickets = 2;
-        uint256 unclaimedTierTwoTickets = 1;
-        uint256 unclaimedTierThreeTickets = 3;
-        DataTypesLib.GameType gameType = DataTypesLib.GameType.Lower;
         uint8 lowerWinner = 33;
         uint8 upperWinner = 98;
+        uint8[] memory lowerNumbers = new uint8[](2);
+        lowerNumbers[0] = lowerWinner;
+        lowerNumbers[1] = upperWinner;
+        uint8[] memory upperNumbers = new uint8[](2);
+        upperNumbers[0] = lowerWinner;
+        upperNumbers[1] = upperWinner;
+        uint256 totalNumbersCount = lowerNumbers.length + upperNumbers.length;
 
-        uint256 tierOneGameFee =
-            lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One);
-        uint256 tierTwoGameFee =
-            lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Two);
-        uint256 tierThreeGameFee =
-            lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Three);
-
-        uint256 expectedUnclaimedTierOne = tierOneGameFee * unclaimedTierOneTickets * lotteryEngineV1.getPayoutFactor();
-        uint256 expectedUnclaimedTierTwo = tierTwoGameFee * unclaimedTierTwoTickets * lotteryEngineV1.getPayoutFactor();
-        uint256 expectedUnclaimedTierThree =
-            tierThreeGameFee * unclaimedTierThreeTickets * lotteryEngineV1.getPayoutFactor();
+        DataTypesLib.GameType gameType = DataTypesLib.GameType.Lower;
+        uint256 tierOneGameFee = lotteryEngineV1.getGameTokenAmountFee(
+            DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One
+        ) * totalNumbersCount;
+        uint256 tierTwoGameFee = lotteryEngineV1.getGameTokenAmountFee(
+            DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Two
+        ) * totalNumbersCount;
+        uint256 tierThreeGameFee = lotteryEngineV1.getGameTokenAmountFee(
+            DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Three
+        ) * totalNumbersCount;
 
         vm.startPrank(USER);
         // Buys 2 tier One tickets
         lotteryEngineV1.buyTwoDigitsTicket{value: tierOneGameFee}(
-            round, gameType, DataTypesLib.GameEntryTier.One, number, PUG_URI
+            round, gameType, DataTypesLib.GameEntryTier.One, lowerNumbers, upperNumbers, PUG_URI
         );
         lotteryEngineV1.buyTwoDigitsTicket{value: tierOneGameFee}(
-            round, gameType, DataTypesLib.GameEntryTier.One, number, PUG_URI
+            round, gameType, DataTypesLib.GameEntryTier.One, lowerNumbers, upperNumbers, PUG_URI
         );
         // Buys 1 tier Two ticket
         lotteryEngineV1.buyTwoDigitsTicket{value: tierTwoGameFee}(
-            round, gameType, DataTypesLib.GameEntryTier.Two, number, PUG_URI
+            round, gameType, DataTypesLib.GameEntryTier.Two, lowerNumbers, upperNumbers, PUG_URI
         );
         // Buyst 3 tier Three tickets
         lotteryEngineV1.buyTwoDigitsTicket{value: tierThreeGameFee}(
-            round, gameType, DataTypesLib.GameEntryTier.Three, number, PUG_URI
+            round, gameType, DataTypesLib.GameEntryTier.Three, lowerNumbers, upperNumbers, PUG_URI
         );
         lotteryEngineV1.buyTwoDigitsTicket{value: tierThreeGameFee}(
-            round, gameType, DataTypesLib.GameEntryTier.Three, number, PUG_URI
+            round, gameType, DataTypesLib.GameEntryTier.Three, lowerNumbers, upperNumbers, PUG_URI
         );
         lotteryEngineV1.buyTwoDigitsTicket{value: tierThreeGameFee}(
-            round, gameType, DataTypesLib.GameEntryTier.Three, number, PUG_URI
+            round, gameType, DataTypesLib.GameEntryTier.Three, lowerNumbers, upperNumbers, PUG_URI
         );
         vm.stopPrank();
 
@@ -1259,6 +1215,25 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
         lotteryEngineV1.pauseRound();
         lotteryEngineV1.postRoundResults(lowerWinner, upperWinner);
         vm.stopPrank();
+
+        uint256 winningTierOneTicketCount = 4; // 2 tickets * 2 wining numbers (upper and lower) per ticket = 4
+        uint256 winningTierTwoTicketCount = 2;
+        uint256 winningTierThreeTicketCount = 6;
+        uint256 expectedUnclaimedTierOne = winningTierOneTicketCount
+            * (
+                lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One)
+                    * lotteryEngineV1.getPayoutFactor()
+            );
+        uint256 expectedUnclaimedTierTwo = winningTierTwoTicketCount
+            * (
+                lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Two)
+                    * lotteryEngineV1.getPayoutFactor()
+            );
+        uint256 expectedUnclaimedTierThree = winningTierThreeTicketCount
+            * (
+                lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Three)
+                    * lotteryEngineV1.getPayoutFactor()
+            );
 
         assertEq(
             lotteryEngineV1.getUnclaimedWinningsPerTierAndRound(round, DataTypesLib.GameEntryTier.One),
@@ -1275,51 +1250,50 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
     }
 
     function testLEV1GetTotalUnclaimedWinningsPerRound() public createNewRound {
-        uint16 round = 1;
-        uint8 number = 33;
-        uint256 unclaimedTierOneTickets = 2;
-        uint256 unclaimedTierTwoTickets = 1;
-        uint256 unclaimedTierThreeTickets = 3;
-        DataTypesLib.GameType gameType = DataTypesLib.GameType.Lower;
         uint8 lowerWinner = 33;
         uint8 upperWinner = 98;
 
-        uint256 tierOneGameFee =
-            lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One);
-        uint256 tierTwoGameFee =
-            lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Two);
-        uint256 tierThreeGameFee =
-            lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Three);
+        uint16 round = 1;
+        uint8[] memory lowerNumbers = new uint8[](2);
+        lowerNumbers[0] = lowerWinner;
+        lowerNumbers[1] = upperWinner;
+        uint8[] memory upperNumbers = new uint8[](2);
+        upperNumbers[0] = lowerWinner;
+        upperNumbers[1] = upperWinner;
+        uint256 totalNumbersCount = lowerNumbers.length + upperNumbers.length;
+        DataTypesLib.GameType gameType = DataTypesLib.GameType.Lower;
 
-        uint256 expectedUnclaimedTierOne = tierOneGameFee * unclaimedTierOneTickets * lotteryEngineV1.getPayoutFactor();
-        uint256 expectedUnclaimedTierTwo = tierTwoGameFee * unclaimedTierTwoTickets * lotteryEngineV1.getPayoutFactor();
-        uint256 expectedUnclaimedTierThree =
-            tierThreeGameFee * unclaimedTierThreeTickets * lotteryEngineV1.getPayoutFactor();
-
-        uint256 expectedTotalUnclaimed =
-            expectedUnclaimedTierOne + expectedUnclaimedTierTwo + expectedUnclaimedTierThree;
+        uint256 tierOneGameFee = lotteryEngineV1.getGameTokenAmountFee(
+            DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One
+        ) * totalNumbersCount;
+        uint256 tierTwoGameFee = lotteryEngineV1.getGameTokenAmountFee(
+            DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Two
+        ) * totalNumbersCount;
+        uint256 tierThreeGameFee = lotteryEngineV1.getGameTokenAmountFee(
+            DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Three
+        ) * totalNumbersCount;
 
         vm.startPrank(USER);
         // Buys 2 tier One tickets
         lotteryEngineV1.buyTwoDigitsTicket{value: tierOneGameFee}(
-            round, gameType, DataTypesLib.GameEntryTier.One, number, PUG_URI
+            round, gameType, DataTypesLib.GameEntryTier.One, lowerNumbers, upperNumbers, PUG_URI
         );
         lotteryEngineV1.buyTwoDigitsTicket{value: tierOneGameFee}(
-            round, gameType, DataTypesLib.GameEntryTier.One, number, PUG_URI
+            round, gameType, DataTypesLib.GameEntryTier.One, lowerNumbers, upperNumbers, PUG_URI
         );
         // Buys 1 tier Two ticket
         lotteryEngineV1.buyTwoDigitsTicket{value: tierTwoGameFee}(
-            round, gameType, DataTypesLib.GameEntryTier.Two, number, PUG_URI
+            round, gameType, DataTypesLib.GameEntryTier.Two, lowerNumbers, upperNumbers, PUG_URI
         );
         // Buyst 3 tier Three tickets
         lotteryEngineV1.buyTwoDigitsTicket{value: tierThreeGameFee}(
-            round, gameType, DataTypesLib.GameEntryTier.Three, number, PUG_URI
+            round, gameType, DataTypesLib.GameEntryTier.Three, lowerNumbers, upperNumbers, PUG_URI
         );
         lotteryEngineV1.buyTwoDigitsTicket{value: tierThreeGameFee}(
-            round, gameType, DataTypesLib.GameEntryTier.Three, number, PUG_URI
+            round, gameType, DataTypesLib.GameEntryTier.Three, lowerNumbers, upperNumbers, PUG_URI
         );
         lotteryEngineV1.buyTwoDigitsTicket{value: tierThreeGameFee}(
-            round, gameType, DataTypesLib.GameEntryTier.Three, number, PUG_URI
+            round, gameType, DataTypesLib.GameEntryTier.Three, lowerNumbers, upperNumbers, PUG_URI
         );
         vm.stopPrank();
 
@@ -1328,55 +1302,76 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
         lotteryEngineV1.postRoundResults(lowerWinner, upperWinner);
         vm.stopPrank();
 
+        uint256 winningTierOneTicketCount = 4; // 2 tickets * 2 wining numbers (upper and lower) per ticket = 4
+        uint256 winningTierTwoTicketCount = 2;
+        uint256 winningTierThreeTicketCount = 6;
+        uint256 expectedUnclaimedTierOne = winningTierOneTicketCount
+            * (
+                lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One)
+                    * lotteryEngineV1.getPayoutFactor()
+            );
+        uint256 expectedUnclaimedTierTwo = winningTierTwoTicketCount
+            * (
+                lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Two)
+                    * lotteryEngineV1.getPayoutFactor()
+            );
+        uint256 expectedUnclaimedTierThree = winningTierThreeTicketCount
+            * (
+                lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Three)
+                    * lotteryEngineV1.getPayoutFactor()
+            );
+
+        uint256 expectedTotalUnclaimed =
+            expectedUnclaimedTierOne + expectedUnclaimedTierTwo + expectedUnclaimedTierThree;
+
         assertEq(lotteryEngineV1.getTotalUnclaimedWinningsPerRound(round), expectedTotalUnclaimed);
     }
 
     function testLEV1GetTotalUnclaimedWinnings() public createNewRound {
-        uint16 round = 1;
-        uint8 number = 33;
-        uint256 unclaimedTierOneTickets = 2;
-        uint256 unclaimedTierTwoTickets = 1;
-        uint256 unclaimedTierThreeTickets = 3;
-        DataTypesLib.GameType gameType = DataTypesLib.GameType.Lower;
         uint8 lowerWinner = 33;
         uint8 upperWinner = 98;
 
-        uint256 tierOneGameFee =
-            lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One);
-        uint256 tierTwoGameFee =
-            lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Two);
-        uint256 tierThreeGameFee =
-            lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Three);
+        uint16 round = 1;
+        uint8[] memory lowerNumbers = new uint8[](2);
+        lowerNumbers[0] = lowerWinner;
+        lowerNumbers[1] = upperWinner;
+        uint8[] memory upperNumbers = new uint8[](2);
+        upperNumbers[0] = lowerWinner;
+        upperNumbers[1] = upperWinner;
+        uint256 totalNumbersCount = lowerNumbers.length + upperNumbers.length;
+        DataTypesLib.GameType gameType = DataTypesLib.GameType.Lower;
 
-        uint256 expectedUnclaimedTierOne = tierOneGameFee * unclaimedTierOneTickets * lotteryEngineV1.getPayoutFactor();
-        uint256 expectedUnclaimedTierTwo = tierTwoGameFee * unclaimedTierTwoTickets * lotteryEngineV1.getPayoutFactor();
-        uint256 expectedUnclaimedTierThree =
-            tierThreeGameFee * unclaimedTierThreeTickets * lotteryEngineV1.getPayoutFactor();
-
-        uint256 totalUnclaimedRoundOne =
-            expectedUnclaimedTierOne + expectedUnclaimedTierTwo + expectedUnclaimedTierThree;
+        uint256 tierOneGameFee = lotteryEngineV1.getGameTokenAmountFee(
+            DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One
+        ) * totalNumbersCount;
+        uint256 tierTwoGameFee = lotteryEngineV1.getGameTokenAmountFee(
+            DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Two
+        ) * totalNumbersCount;
+        uint256 tierThreeGameFee = lotteryEngineV1.getGameTokenAmountFee(
+            DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Three
+        ) * totalNumbersCount;
 
         vm.startPrank(USER);
         // Buys 2 tier One tickets
         lotteryEngineV1.buyTwoDigitsTicket{value: tierOneGameFee}(
-            round, gameType, DataTypesLib.GameEntryTier.One, number, PUG_URI
+            round, gameType, DataTypesLib.GameEntryTier.One, lowerNumbers, upperNumbers, PUG_URI
         );
         lotteryEngineV1.buyTwoDigitsTicket{value: tierOneGameFee}(
-            round, gameType, DataTypesLib.GameEntryTier.One, number, PUG_URI
+            round, gameType, DataTypesLib.GameEntryTier.One, lowerNumbers, upperNumbers, PUG_URI
         );
         // Buys 1 tier Two ticket
         lotteryEngineV1.buyTwoDigitsTicket{value: tierTwoGameFee}(
-            round, gameType, DataTypesLib.GameEntryTier.Two, number, PUG_URI
+            round, gameType, DataTypesLib.GameEntryTier.Two, lowerNumbers, upperNumbers, PUG_URI
         );
         // Buyst 3 tier Three tickets
         lotteryEngineV1.buyTwoDigitsTicket{value: tierThreeGameFee}(
-            round, gameType, DataTypesLib.GameEntryTier.Three, number, PUG_URI
+            round, gameType, DataTypesLib.GameEntryTier.Three, lowerNumbers, upperNumbers, PUG_URI
         );
         lotteryEngineV1.buyTwoDigitsTicket{value: tierThreeGameFee}(
-            round, gameType, DataTypesLib.GameEntryTier.Three, number, PUG_URI
+            round, gameType, DataTypesLib.GameEntryTier.Three, lowerNumbers, upperNumbers, PUG_URI
         );
         lotteryEngineV1.buyTwoDigitsTicket{value: tierThreeGameFee}(
-            round, gameType, DataTypesLib.GameEntryTier.Three, number, PUG_URI
+            round, gameType, DataTypesLib.GameEntryTier.Three, lowerNumbers, upperNumbers, PUG_URI
         );
         vm.stopPrank();
 
@@ -1387,20 +1382,46 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
         vm.stopPrank();
 
         uint16 roundTwo = 2;
-        uint256 unclaimedTierOneTicketsRoundTwo = 1;
-        uint256 expectedUnclaimedTierOneRoundTwo =
-            tierOneGameFee * unclaimedTierOneTicketsRoundTwo * lotteryEngineV1.getPayoutFactor();
-        uint256 expectedTotalUnclaimed = totalUnclaimedRoundOne + expectedUnclaimedTierOneRoundTwo;
+        uint256 winningTierOneTicketCountRoundTwo = 2;
+        uint256 expectedUnclaimedTierOneRoundTwo = winningTierOneTicketCountRoundTwo
+            * (
+                lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One)
+                    * lotteryEngineV1.getPayoutFactor()
+            );
 
         vm.prank(USER);
         lotteryEngineV1.buyTwoDigitsTicket{value: tierOneGameFee}(
-            roundTwo, gameType, DataTypesLib.GameEntryTier.One, number, PUG_URI
+            roundTwo, gameType, DataTypesLib.GameEntryTier.One, lowerNumbers, upperNumbers, PUG_URI
         );
 
         vm.startPrank(LotteryEngineV1(engineProxyAddress).owner());
         lotteryEngineV1.pauseRound();
         lotteryEngineV1.postRoundResults(lowerWinner, upperWinner);
         vm.stopPrank();
+
+        uint256 winningTierOneTicketCount = 4; // 2 tickets * 2 wining numbers (upper and lower) per ticket = 4
+        uint256 winningTierTwoTicketCount = 2;
+        uint256 winningTierThreeTicketCount = 6;
+        uint256 expectedUnclaimedTierOne = winningTierOneTicketCount
+            * (
+                lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.One)
+                    * lotteryEngineV1.getPayoutFactor()
+            );
+        uint256 expectedUnclaimedTierTwo = winningTierTwoTicketCount
+            * (
+                lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Two)
+                    * lotteryEngineV1.getPayoutFactor()
+            );
+        uint256 expectedUnclaimedTierThree = winningTierThreeTicketCount
+            * (
+                lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, DataTypesLib.GameEntryTier.Three)
+                    * lotteryEngineV1.getPayoutFactor()
+            );
+
+        uint256 totalUnclaimedRoundOne =
+            expectedUnclaimedTierOne + expectedUnclaimedTierTwo + expectedUnclaimedTierThree;
+
+        uint256 expectedTotalUnclaimed = totalUnclaimedRoundOne + expectedUnclaimedTierOneRoundTwo;
 
         assertEq(lotteryEngineV1.getTotalUnclaimedWinnings(), expectedTotalUnclaimed);
     }
@@ -1428,81 +1449,84 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
 
     function testLEVGetTicketInfoReturnsIsWinnerTrue(uint256 _gameType, uint256 _tier) public createNewRound {
         _tier = bound(_tier, 0, 2);
-        _gameType = bound(_gameType, 0, 3);
-        uint256 number = 27;
+        _gameType = bound(_gameType, 0, 1);
+
+        uint16 round = 1;
         uint8 lowerWinner = 27;
         uint8 upperWinner = 72;
 
-        uint16 round = 1;
+        uint8[] memory lowerNumbers = new uint8[](2);
+        lowerNumbers[0] = lowerWinner;
+        lowerNumbers[1] = upperWinner;
+        uint8[] memory upperNumbers = new uint8[](2);
+        upperNumbers[0] = lowerWinner;
+        upperNumbers[1] = upperWinner;
+
         DataTypesLib.GameType gameType = DataTypesLib.GameType(_gameType);
         DataTypesLib.GameEntryTier tier = DataTypesLib.GameEntryTier(_tier);
-        uint256 gameFee = lotteryEngineV1.calculateTwoDigitsTicketFee(DataTypesLib.GameDigits.Two, gameType, tier);
+
+        uint256 totalNumbersCount = lowerNumbers.length + upperNumbers.length;
+        uint256 tierFee = lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, tier);
+        uint256 gameFee = tierFee * totalNumbersCount;
 
         vm.prank(USER);
-        uint256 tokenId =
-            lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(round, gameType, tier, uint8(number), PUG_URI);
+        uint256 tokenId = lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(
+            round, gameType, tier, lowerNumbers, upperNumbers, PUG_URI
+        );
 
         vm.startPrank(LotteryEngineV1(engineProxyAddress).owner());
         lotteryEngineV1.pauseRound();
         lotteryEngineV1.postRoundResults(lowerWinner, upperWinner);
         vm.stopPrank();
 
-        (,,,,,, bool isWinner,) = lotteryEngineV1.getTicketInfo(tokenId);
+        uint8 expectedWinCount = 2;
+        uint256 expectedTicketPayOut = expectedWinCount * tierFee * lotteryEngineV1.getPayoutFactor();
 
-        assertEq(isWinner, true);
+        (,,,,,,, uint256 ticketWinCount,, uint256 ticketPayout) = lotteryEngineV1.getTicketInfo(tokenId);
+
+        assertEq(ticketWinCount, expectedWinCount);
+        assertEq(ticketPayout, expectedTicketPayOut);
     }
 
     function testLEVGetTicketInfoReturnsIsWinnerFalse(uint256 _gameType, uint256 _tier) public createNewRound {
         _tier = bound(_tier, 0, 2);
-        _gameType = bound(_gameType, 0, 3);
-        uint256 number = 42;
+        _gameType = bound(_gameType, 0, 1);
+
+        uint16 round = 1;
         uint8 lowerWinner = 27;
         uint8 upperWinner = 72;
 
-        uint16 round = 1;
+        uint8[] memory lowerNumbers = new uint8[](2);
+        lowerNumbers[0] = 14;
+        lowerNumbers[1] = 22;
+        uint8[] memory upperNumbers = new uint8[](2);
+        upperNumbers[0] = 13;
+        upperNumbers[1] = 22;
+
         DataTypesLib.GameType gameType = DataTypesLib.GameType(_gameType);
         DataTypesLib.GameEntryTier tier = DataTypesLib.GameEntryTier(_tier);
-        uint256 gameFee = lotteryEngineV1.calculateTwoDigitsTicketFee(DataTypesLib.GameDigits.Two, gameType, tier);
+
+        uint256 totalNumbersCount = lowerNumbers.length + upperNumbers.length;
+        uint256 tierFee = lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, tier);
+        uint256 gameFee = tierFee * totalNumbersCount;
 
         vm.prank(USER);
-        uint256 tokenId =
-            lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(round, gameType, tier, uint8(number), PUG_URI);
+        uint256 tokenId = lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(
+            round, gameType, tier, lowerNumbers, upperNumbers, PUG_URI
+        );
 
         vm.startPrank(LotteryEngineV1(engineProxyAddress).owner());
         lotteryEngineV1.pauseRound();
         lotteryEngineV1.postRoundResults(lowerWinner, upperWinner);
         vm.stopPrank();
 
-        (,,,,,, bool isWinner,) = lotteryEngineV1.getTicketInfo(tokenId);
+        uint256 expectedTicketPayOut = 0;
+        uint8 expectedWinCount = 0;
 
-        assertEq(isWinner, false);
-    }
+        (,,,,,,, uint8 ticketWinCount,, uint256 ticketPayout) = lotteryEngineV1.getTicketInfo(tokenId);
 
-    function testLEV1ReveseTwoDigitUint8Reverts() public {
-        uint8 number = 0;
-        vm.expectRevert(LotteryEngineV1.LotteryEngine__NumberOutOfRange.selector);
-        lotteryEngineV1.reverseTwoDigitUint8(number);
-
-        number = 100;
-        vm.expectRevert(LotteryEngineV1.LotteryEngine__NumberOutOfRange.selector);
-        lotteryEngineV1.reverseTwoDigitUint8(number);
-    }
-
-    function testLEV1ReverseTwoDigitUint8() public {
-        uint8 number = 33;
-        uint8 expectedReversedNumber = 33;
-        uint8 reversedNumber = lotteryEngineV1.reverseTwoDigitUint8(number);
-        assertEq(reversedNumber, expectedReversedNumber);
-
-        number = 12;
-        expectedReversedNumber = 21;
-        reversedNumber = lotteryEngineV1.reverseTwoDigitUint8(number);
-        assertEq(reversedNumber, expectedReversedNumber);
-
-        number = 99;
-        expectedReversedNumber = 99;
-        reversedNumber = lotteryEngineV1.reverseTwoDigitUint8(number);
-        assertEq(reversedNumber, expectedReversedNumber);
+        assertEq(expectedWinCount, ticketWinCount);
+        assertEq(ticketPayout, expectedTicketPayOut);
     }
 
     function testLEV1Version() public {
