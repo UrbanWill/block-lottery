@@ -654,6 +654,37 @@ contract LotteryEngineV1Test is StdCheats, Test, GasHelpers {
 
         assertEq(ticketV1.ownerOf(0), USER);
     }
+
+    uint8[] lowerNumbersTest = [1, 2, 3, 4, 5, 6, 7, 8];
+    uint8[] upperNumbersTest = [1, 2, 3, 4, 5, 6, 7, 8];
+
+    function testLEV1BuyTwoDigitsMintsNftGasCalc(uint256 _gameType, uint256 _tier)
+        // uint8[] calldata lowerNumbers,
+        // uint8[] calldata upperNumbers
+        public
+        createNewRound
+    {
+        _tier = bound(_tier, 0, 2);
+        _gameType = bound(_gameType, 0, 1);
+        // vm.assume(upperNumbers.length < 99);
+        // vm.assume(lowerNumbers.length < 99);
+
+        uint256 totalNumbersCount = lowerNumbersTest.length + upperNumbersTest.length;
+        uint16 round = 1;
+        DataTypesLib.GameType gameType = DataTypesLib.GameType(_gameType);
+        DataTypesLib.GameEntryTier tier = DataTypesLib.GameEntryTier(_tier);
+        uint256 tierFee = lotteryEngineV1.getGameTokenAmountFee(DataTypesLib.GameDigits.Two, tier);
+        uint256 gameFee = tierFee * totalNumbersCount;
+
+        startMeasuringGas("buyTicket gas:");
+        vm.prank(USER);
+        lotteryEngineV1.buyTwoDigitsTicket{value: gameFee}(
+            round, gameType, tier, lowerNumbersTest, upperNumbersTest, PUG_URI
+        );
+        stopMeasuringGas();
+
+        assertEq(ticketV1.ownerOf(0), USER);
+    }
     ////////////////////////////////////////
     // claimWinnings Tests                //
     ////////////////////////////////////////
