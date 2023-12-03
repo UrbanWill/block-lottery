@@ -28,10 +28,10 @@ contract TicketV1 is
     struct TokenInfo {
         bool claimed;
         uint16 round;
-        DataTypesLib.GameDigits gameDigit;
+        DataTypesLib.GameDigits gameDigits;
         DataTypesLib.GameType gameType;
         DataTypesLib.GameEntryTier tier;
-        uint8 number;
+        uint8[] numbers;
     }
 
     ////////////////////////////////////////
@@ -62,10 +62,10 @@ contract TicketV1 is
     function safeMint(
         address to,
         uint16 round,
-        DataTypesLib.GameDigits gameDigit,
+        DataTypesLib.GameDigits gameDigits,
         DataTypesLib.GameType gameType,
         DataTypesLib.GameEntryTier tier,
-        uint8 number,
+        uint8[] calldata numbers,
         string memory uri
     ) public onlyRole(MINTER_ROLE) returns (uint256) {
         uint256 tokenId = _nextTokenId++;
@@ -77,10 +77,10 @@ contract TicketV1 is
             TokenInfo({
                 claimed: false,
                 round: round,
-                gameDigit: gameDigit,
+                gameDigits: gameDigits,
                 gameType: gameType,
                 tier: tier,
-                number: number
+                numbers: numbers
             })
         );
 
@@ -138,6 +138,26 @@ contract TicketV1 is
     ////////////////////////////////////////
     // Public & External View Functions   //
     ////////////////////////////////////////
+
+    /**
+     *
+     * @param tokenId Id of the token to get info for
+     */
+    function getTokenInfo(uint256 tokenId)
+        public
+        view
+        returns (
+            bool claimed,
+            uint16 round,
+            DataTypesLib.GameDigits gameDigits,
+            DataTypesLib.GameType gameType,
+            DataTypesLib.GameEntryTier tier,
+            uint8[] memory numbers
+        )
+    {
+        TokenInfo memory info = tokenInfo[tokenId];
+        return (info.claimed, info.round, info.gameDigits, info.gameType, info.tier, info.numbers);
+    }
 
     function version() public pure returns (uint8) {
         return 1;
