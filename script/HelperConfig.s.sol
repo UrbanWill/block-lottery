@@ -20,6 +20,10 @@ contract HelperConfig is Script {
     constructor() {
         if (block.chainid == 11155111) {
             activeNetworkConfig = getSepoliaEthConfig();
+        } else if (block.chainid == 137) {
+            activeNetworkConfig = getMaticEthConfig();
+        } else if (block.chainid == 80001) {
+            activeNetworkConfig = getMumbaiEthConfig();
         } else {
             activeNetworkConfig = getOrCreateAnvilEthConfig();
         }
@@ -38,6 +42,28 @@ contract HelperConfig is Script {
         sepoliaNetworkConfig = NetworkConfig({
             deployerKey: vm.envUint("PRIVATE_KEY"),
             priceFeed: 0x694AA1769357215DE4FAC081bf1f309aDC325306, // ETH/USD
+            twoDigitGameFee1: twoDigitGameFee1,
+            twoDigitGameFee2: twoDigitGameFee2,
+            twoDigitGameFee3: twoDigitGameFee3,
+            payoutFactor: payoutFactor
+        });
+    }
+
+    function getMaticEthConfig() public view returns (NetworkConfig memory sepoliaNetworkConfig) {
+        sepoliaNetworkConfig = NetworkConfig({
+            deployerKey: vm.envUint("PRIVATE_KEY"),
+            priceFeed: 0xAB594600376Ec9fD91F8e885dADF0CE036862dE0, // MATIC/USD
+            twoDigitGameFee1: twoDigitGameFee1,
+            twoDigitGameFee2: twoDigitGameFee2,
+            twoDigitGameFee3: twoDigitGameFee3,
+            payoutFactor: payoutFactor
+        });
+    }
+
+    function getMumbaiEthConfig() public view returns (NetworkConfig memory sepoliaNetworkConfig) {
+        sepoliaNetworkConfig = NetworkConfig({
+            deployerKey: vm.envUint("PRIVATE_KEY"),
+            priceFeed: 0xd0D5e3DB44DE05E9F294BB0a3bEEaF030DE24Ada, // MATIC/USD
             twoDigitGameFee1: twoDigitGameFee1,
             twoDigitGameFee2: twoDigitGameFee2,
             twoDigitGameFee3: twoDigitGameFee3,
